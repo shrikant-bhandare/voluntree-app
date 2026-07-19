@@ -44,14 +44,46 @@ RSAPrivateKey rsaPrivateKeyFromJson(String jsonStr) {
   );
 }
 
+// Top-level function for background key generation to avoid blocking UI thread
+Map<String, String> _generateRSAKeysInBackground(int strength) {
+  final keyGen = RSAKeyGenerator();
+  final secureRandom = FortunaRandom();
+  final random = Random.secure();
+  final seeds = List<int>.generate(32, (_) => random.nextInt(256));
+  secureRandom.seed(pc.KeyParameter(Uint8List.fromList(seeds)));
+  
+  // Using certainty 20 for faster prime generation while remaining cryptographically secure
+  keyGen.init(pc.ParametersWithRandom(
+    RSAKeyGeneratorParameters(BigInt.parse('65537'), strength, 20),
+    secureRandom,
+  ));
+
+  final pair = keyGen.generateKeyPair();
+  final pubKey = pair.publicKey as RSAPublicKey;
+  final privKey = pair.privateKey as RSAPrivateKey;
+
+  return {
+    'publicKey': rsaPublicKeyToJson(pubKey),
+    'privateKey': rsaPrivateKeyToJson(privKey),
+  };
+}
+
 class EncryptionHelper {
   // Cached private key loaded on startup for synchronous message decryption
   static String? localPrivateKey;
+  static RSAPrivateKey? _cachedPrivateKey;
 
   // Load private key from storage
   static Future<void> loadKeys() async {
     final prefs = await SharedPreferences.getInstance();
     localPrivateKey = prefs.getString('e2ee_private_key');
+    if (localPrivateKey != null) {
+      try {
+        _cachedPrivateKey = rsaPrivateKeyFromJson(localPrivateKey!);
+      } catch (e) {
+        debugPrint('[CRYPTO HELPER] Error caching private key: $e');
+      }
+    }
   }
 
   // Generate RSA Key pair and save JSON strings to SharedPreferences
@@ -63,32 +95,28 @@ class EncryptionHelper {
     final storedPriv = prefs.getString('e2ee_private_key');
     if (storedPub != null && storedPriv != null) {
       localPrivateKey = storedPriv;
+      try {
+        _cachedPrivateKey ??= rsaPrivateKeyFromJson(storedPriv);
+      } catch (e) {
+        debugPrint('[CRYPTO HELPER] Error caching stored private key: $e');
+      }
       return {'publicKey': storedPub, 'privateKey': storedPriv};
     }
     
-    // Generate new RSA-2048 keypair
-    final keyGen = RSAKeyGenerator();
-    final secureRandom = FortunaRandom();
-    final random = Random.secure();
-    final seeds = List<int>.generate(32, (_) => random.nextInt(256));
-    secureRandom.seed(pc.KeyParameter(Uint8List.fromList(seeds)));
-    
-    keyGen.init(pc.ParametersWithRandom(
-      RSAKeyGeneratorParameters(BigInt.parse('65537'), 2048, 64),
-      secureRandom,
-    ));
-
-    final pair = keyGen.generateKeyPair();
-    final pubKey = pair.publicKey as RSAPublicKey;
-    final privKey = pair.privateKey as RSAPrivateKey;
-
-    final pubJson = rsaPublicKeyToJson(pubKey);
-    final privJson = rsaPrivateKeyToJson(privKey);
+    // Generate new RSA-2048 keypair in a background isolate
+    final keys = await compute(_generateRSAKeysInBackground, 2048);
+    final pubJson = keys['publicKey']!;
+    final privJson = keys['privateKey']!;
 
     await prefs.setString('e2ee_public_key', pubJson);
     await prefs.setString('e2ee_private_key', privJson);
 
     localPrivateKey = privJson;
+    try {
+      _cachedPrivateKey = rsaPrivateKeyFromJson(privJson);
+    } catch (e) {
+      debugPrint('[CRYPTO HELPER] Error caching newly generated private key: $e');
+    }
 
     return {'publicKey': pubJson, 'privateKey': privJson};
   }
@@ -171,7 +199,12 @@ class EncryptionHelper {
     required String privateKeyJson,
   }) {
     try {
-      final privateKey = rsaPrivateKeyFromJson(privateKeyJson);
+      final RSAPrivateKey privateKey;
+      if (_cachedPrivateKey != null && localPrivateKey == privateKeyJson) {
+        privateKey = _cachedPrivateKey!;
+      } else {
+        privateKey = rsaPrivateKeyFromJson(privateKeyJson);
+      }
       
       // 1. Decrypt AES key bundle using RSA private key
       final rsaEncrypter = Encrypter(RSA(privateKey: privateKey));

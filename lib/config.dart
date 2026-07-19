@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' as io;
 
 class AppConfig {
+  // Flag to globally enable or disable End-to-End Encryption (E2EE)
+  static const bool enableE2EE = false;
+
   // Centralized base URL configuration.
   // Dynamically detects environment (Web vs Emulator vs iOS/Desktop).
   static String get baseUrl {

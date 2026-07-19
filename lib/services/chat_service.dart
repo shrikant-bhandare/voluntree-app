@@ -102,7 +102,7 @@ class ChatMessage {
     var rawContent = json['content'] ?? '';
     String? fileUrl = json['fileUrl'];
     
-    if (rawContent.startsWith('{') && rawContent.endsWith('}')) {
+    if (AppConfig.enableE2EE && rawContent.startsWith('{') && rawContent.endsWith('}')) {
       try {
         final parsed = jsonDecode(rawContent);
         if (parsed.containsKey('ct') && parsed.containsKey('ek')) {
@@ -166,6 +166,7 @@ class ChatService extends ChangeNotifier {
   List<dynamic> _conversations = [];
   bool _isLoadingHistory = false;
   bool _isConnected = false;
+  bool _isConnecting = false;
 
   // Recipient public keys cache
   final Map<String, String> _publicKeysCache = {};
@@ -175,7 +176,9 @@ class ChatService extends ChangeNotifier {
   Map<String, bool> get userPresenceMap => _userPresenceMap;
 
   ChatService() {
-    EncryptionHelper.loadKeys();
+    if (AppConfig.enableE2EE) {
+      EncryptionHelper.loadKeys();
+    }
   }
 
   Future<String?> getRecipientPublicKey(String token, String userId) async {
@@ -220,54 +223,76 @@ class ChatService extends ChangeNotifier {
 
   // Initialize socket connection
   void initSocket(String token) async {
+    if (_token == token && (_isConnected || _isConnecting) && _socket != null) {
+      debugPrint('[CHAT SERVICE] Socket already connecting/connected. Skipping initialization.');
+      return;
+    }
     _token = token;
-    
-    // E2EE Key Generation and Registration
+    _isConnecting = true;
+    notifyListeners();
+
     try {
-      final keys = await EncryptionHelper.generateAndSaveKeys();
-      final pubKey = keys['publicKey']!;
-      
-      // Register public key on the backend
-      await http.post(
-        Uri.parse('$baseUrl/auth/public-key'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'publicKey': pubKey}),
-      );
-      debugPrint('[CHAT SERVICE] E2EE Public key successfully registered on backend.');
-    } catch (e) {
-      debugPrint('[CHAT SERVICE] E2EE Key registration failed: $e');
-    }
-
-    if (_socket != null) {
-      _socket!.disconnect();
-    }
-
-    _socket = io.io(
-      baseUrl,
-      io.OptionBuilder()
-          .setTransports(['websocket']) // Use WebSocket transport exclusively
-          .setQuery({'token': token})   // Pass JWT in query params
-          .enableForceNew()
-          .build(),
-    );
-
-    _socket!.onConnect((_) {
-      _isConnected = true;
-      debugPrint('[CHAT SERVICE] WebSockets connected successfully.');
-      if (activeChatUserId != null) {
-        sendReadConfirmation(activeChatUserId!);
+      // E2EE Key Generation and Registration (Only if E2EE is enabled)
+      if (AppConfig.enableE2EE) {
+        try {
+          final keys = await EncryptionHelper.generateAndSaveKeys();
+          final pubKey = keys['publicKey']!;
+          
+          // Register public key on the backend
+          await http.post(
+            Uri.parse('$baseUrl/auth/public-key'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'publicKey': pubKey}),
+          );
+          debugPrint('[CHAT SERVICE] E2EE Public key successfully registered on backend.');
+        } catch (e) {
+          debugPrint('[CHAT SERVICE] E2EE Key registration failed: $e');
+        }
       }
-      notifyListeners();
-    });
 
-    _socket!.onDisconnect((_) {
-      _isConnected = false;
-      debugPrint('[CHAT SERVICE] WebSockets disconnected.');
+      if (_socket != null) {
+        _socket!.disconnect();
+      }
+
+      _socket = io.io(
+        baseUrl,
+        io.OptionBuilder()
+            .setTransports(['websocket']) // Use WebSocket transport exclusively
+            .setQuery({'token': token})   // Pass JWT in query params
+            .enableForceNew()
+            .build(),
+      );
+
+      _socket!.onConnect((_) {
+        _isConnected = true;
+        _isConnecting = false;
+        debugPrint('[CHAT SERVICE] WebSockets connected successfully.');
+        if (activeChatUserId != null) {
+          sendReadConfirmation(activeChatUserId!);
+        }
+        notifyListeners();
+      });
+
+      _socket!.onDisconnect((_) {
+        _isConnected = false;
+        _isConnecting = false;
+        debugPrint('[CHAT SERVICE] WebSockets disconnected.');
+        notifyListeners();
+      });
+
+      _socket!.onConnectError((err) {
+        _isConnecting = false;
+        debugPrint('[CHAT SERVICE] WebSockets connection error: $err');
+        notifyListeners();
+      });
+    } catch (e) {
+      _isConnecting = false;
+      debugPrint('[CHAT SERVICE] Socket creation error: $e');
       notifyListeners();
-    });
+    }
 
     // Listen for incoming real-time messages
     _socket!.on('receiveMessage', (data) {
@@ -401,6 +426,7 @@ class ChatService extends ChangeNotifier {
       _socket!.disconnect();
       _socket = null;
       _isConnected = false;
+      _isConnecting = false;
     }
   }
 
@@ -497,6 +523,17 @@ class ChatService extends ChangeNotifier {
 
     if (_token == null) return;
 
+    if (!AppConfig.enableE2EE) {
+      _socket!.emit('sendMessage', {
+        'receiverId': receiverId,
+        'content': content,
+        'fileUrl': fileUrl,
+        'type': type.name,
+        'replyToId': replyToId,
+      });
+      return;
+    }
+
     // 1. Get recipient public key
     final recipientPubKey = await getRecipientPublicKey(_token!, receiverId);
     if (recipientPubKey == null) {
@@ -547,19 +584,21 @@ class ChatService extends ChangeNotifier {
       final msg = _messages[idx];
       final recipientId = msg.receiverId;
       
-      final recipientPubKey = await getRecipientPublicKey(token, recipientId);
       var encryptedContent = content;
       
-      if (recipientPubKey != null) {
-        final encrypted = EncryptionHelper.encryptMessage(
-          plaintext: content,
-          recipientPublicKeyJson: recipientPubKey,
-        );
-        if (encrypted != null) {
-          encryptedContent = jsonEncode({
-            'ct': encrypted['ciphertext'],
-            'ek': encrypted['encryptedKey'],
-          });
+      if (AppConfig.enableE2EE) {
+        final recipientPubKey = await getRecipientPublicKey(token, recipientId);
+        if (recipientPubKey != null) {
+          final encrypted = EncryptionHelper.encryptMessage(
+            plaintext: content,
+            recipientPublicKeyJson: recipientPubKey,
+          );
+          if (encrypted != null) {
+            encryptedContent = jsonEncode({
+              'ct': encrypted['ciphertext'],
+              'ek': encrypted['encryptedKey'],
+            });
+          }
         }
       }
 

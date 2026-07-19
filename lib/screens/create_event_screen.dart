@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'dart:io' show Platform;
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 
@@ -21,6 +23,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   late final TextEditingController _volunteersController;
   late final TextEditingController _minAgeController;
   late final TextEditingController _compensationController;
+  late final TextEditingController _latitudeController;
+  late final TextEditingController _longitudeController;
 
   String _category = 'Environmental';
   bool _isOnline = false;
@@ -29,6 +33,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 17, minute: 0);
   String? _bannerUrl;
+  List<String> _openPositions = [];
+  List<String> _perks = [];
 
   bool _isSaving = false;
 
@@ -43,6 +49,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _volunteersController = TextEditingController(text: e != null ? e.volunteersNeeded.toString() : '10');
     _minAgeController = TextEditingController(text: e != null ? e.minAge.toString() : '16');
     _compensationController = TextEditingController(text: e?.compensationDetails ?? '');
+    _latitudeController = TextEditingController(text: e?.latitude != null ? e!.latitude.toString() : '');
+    _longitudeController = TextEditingController(text: e?.longitude != null ? e!.longitude.toString() : '');
+    _openPositions = e?.openPositions != null ? List<String>.from(e!.openPositions) : [];
+    _perks = e?.perks != null ? List<String>.from(e!.perks) : [];
     if (e != null) {
       _category = e.category;
       _isOnline = e.isOnline;
@@ -61,6 +71,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     _volunteersController.dispose();
     _minAgeController.dispose();
     _compensationController.dispose();
+    _latitudeController.dispose();
+    _longitudeController.dispose();
     super.dispose();
   }
 
@@ -104,18 +116,118 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       'Social Awareness': 'https://images.unsplash.com/photo-1509099836639-18ba1795216d?w=600&auto=format&fit=crop&q=80',
     };
 
-    final galleryPhotos = [
-      'https://images.unsplash.com/photo-1448375240586-882707db888b?w=600',
-      'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?w=600',
-      'https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=600',
-      'https://images.unsplash.com/photo-1596492784531-6e6eb5ea9993?w=600',
-      'https://images.unsplash.com/photo-1547082299-de196ea013d6?w=600',
-      'https://images.unsplash.com/photo-1461530967064-3000627ae6c3?w=600',
-    ];
-
     final urlController = TextEditingController(text: _bannerUrl ?? '');
     bool isUploading = false;
     String uploadStatus = '';
+
+    Future<void> pickAndUploadImage(ImageSource source, StateSetter setModalState) async {
+      bool hasPermission = false;
+      
+      try {
+        if (source == ImageSource.camera) {
+          final status = await Permission.camera.request();
+          if (status.isGranted) {
+            hasPermission = true;
+          } else if (status.isPermanentlyDenied) {
+            await openAppSettings();
+          }
+        } else {
+          if (Platform.isIOS) {
+            final status = await Permission.photos.request();
+            if (status.isGranted || status.isLimited) {
+              hasPermission = true;
+            } else if (status.isPermanentlyDenied) {
+              await openAppSettings();
+            }
+          } else if (Platform.isAndroid) {
+            final status = await Permission.photos.request();
+            if (status.isGranted) {
+              hasPermission = true;
+            } else {
+              final storageStatus = await Permission.storage.request();
+              if (storageStatus.isGranted) {
+                hasPermission = true;
+              } else if (storageStatus.isPermanentlyDenied) {
+                await openAppSettings();
+              }
+            }
+          } else {
+            hasPermission = true;
+          }
+        }
+      } catch (e) {
+        debugPrint('[PERMISSION ERROR] $e');
+        hasPermission = true; // fallback
+      }
+
+      if (!hasPermission) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Permission denied. Please grant permission in settings to upload.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
+      try {
+        final ImagePicker picker = ImagePicker();
+        final XFile? image = await picker.pickImage(
+          source: source,
+          imageQuality: 85,
+        );
+
+        if (image == null) return;
+
+        setModalState(() {
+          isUploading = true;
+          uploadStatus = 'Reading image file...';
+        });
+
+        final bytes = await image.readAsBytes();
+
+        setModalState(() {
+          uploadStatus = 'Uploading cover image...';
+        });
+
+        final auth = Provider.of<AuthService>(context, listen: false);
+        final eventService = Provider.of<EventService>(context, listen: false);
+
+        if (auth.token != null) {
+          final uploadedUrl = await eventService.uploadEventImage(
+            auth.token!,
+            bytes,
+            image.name,
+          );
+
+          if (uploadedUrl != null) {
+            setState(() {
+              _bannerUrl = uploadedUrl;
+            });
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Photo uploaded and added successfully!'),
+                backgroundColor: Color(0xFF006C48),
+              ),
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('[UPLOAD ERROR] $e');
+      }
+
+      setModalState(() {
+        isUploading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to upload photo. Please check server connection.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
 
     showModalBottomSheet(
       context: context,
@@ -150,7 +262,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                       unselectedLabelColor: Colors.grey,
                       indicatorColor: Color(0xFF0E6C4A),
                       tabs: [
-                        Tab(text: 'Local Gallery'),
+                        Tab(text: 'Upload Photo'),
                         Tab(text: 'Preset Library'),
                         Tab(text: 'Custom URL'),
                       ],
@@ -175,92 +287,98 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                         height: 240,
                         child: TabBarView(
                           children: [
-                            // Tab 1: Simulated local device gallery
-                            GridView.builder(
-                              shrinkWrap: true,
-                              itemCount: galleryPhotos.length,
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                              ),
-                              itemBuilder: (context, index) {
-                                final photoUrl = galleryPhotos[index];
-                                return GestureDetector(
-                                  onTap: () async {
-                                    setModalState(() {
-                                      isUploading = true;
-                                      uploadStatus = 'Downloading image bytes...';
-                                    });
-
-                                    try {
-                                      // 1. Download the high quality preset image to simulate local file bytes
-                                      final response = await http.get(Uri.parse(photoUrl));
-                                      if (response.statusCode == 200) {
-                                        setModalState(() {
-                                          uploadStatus = 'Uploading photo to server...';
-                                        });
-
-                                        final auth = Provider.of<AuthService>(context, listen: false);
-                                        final eventService = Provider.of<EventService>(context, listen: false);
-
-                                        if (auth.token != null) {
-                                          // 2. Upload file bytes via multipart form data request
-                                          final uploadedUrl = await eventService.uploadEventImage(
-                                            auth.token!,
-                                            response.bodyBytes,
-                                            'device_gallery_upload_$index.jpg',
-                                          );
-
-                                          if (uploadedUrl != null) {
-                                            setState(() {
-                                              _bannerUrl = uploadedUrl;
-                                            });
-                                            Navigator.of(context).pop();
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Photo uploaded and added successfully!'),
-                                                backgroundColor: Color(0xFF006C48),
-                                              ),
-                                            );
-                                            return;
-                                          }
-                                        }
-                                      }
-                                    } catch (e) {
-                                      debugPrint('[UPLOAD ERROR] $e');
-                                    }
-
-                                    setModalState(() {
-                                      isUploading = false;
-                                    });
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Failed to upload photo. Please check server connection.'),
-                                        backgroundColor: Colors.redAccent,
-                                      ),
-                                    );
-                                  },
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        Image.network(photoUrl, fit: BoxFit.cover),
-                                        Positioned(
-                                          bottom: 4,
-                                          right: 4,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(2),
-                                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                                            child: const Icon(Icons.add, color: Colors.white, size: 14),
-                                          ),
-                                        )
-                                      ],
+                            // Tab 1: Local Upload from Phone
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    'Upload cover image from your device:',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF717973),
                                     ),
                                   ),
-                                );
-                              },
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => pickAndUploadImage(ImageSource.gallery, setModalState),
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: Container(
+                                            height: 120,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(color: const Color(0xFFE8EFF1), width: 2),
+                                              color: const Color(0xFFF4FAFD),
+                                            ),
+                                            child: const Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.photo_library_outlined, size: 36, color: Color(0xFF0E6C4A)),
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'Choose Gallery',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                    color: Color(0xFF012D1D),
+                                                  ),
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  'Select from photos',
+                                                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => pickAndUploadImage(ImageSource.camera, setModalState),
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: Container(
+                                            height: 120,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(color: const Color(0xFFE8EFF1), width: 2),
+                                              color: const Color(0xFFF4FAFD),
+                                            ),
+                                            child: const Column(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.camera_alt_outlined, size: 36, color: Color(0xFF0E6C4A)),
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'Take Photo',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                    color: Color(0xFF012D1D),
+                                                  ),
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  'Snap with camera',
+                                                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
 
                             // Tab 2: High quality curated presets
@@ -357,6 +475,88 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     );
   }
 
+  void _addPositionDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add Open Position', style: TextStyle(color: Color(0xFF012D1D), fontWeight: FontWeight.bold, fontSize: 16)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'e.g. Eco Team Lead',
+              fillColor: const Color(0xFFF4FAFD),
+              filled: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006C48), foregroundColor: Colors.white),
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isNotEmpty && !_openPositions.contains(text)) {
+                  setState(() {
+                    _openPositions.add(text);
+                  });
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _addPerkDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add Perk or Benefit', style: TextStyle(color: Color(0xFF012D1D), fontWeight: FontWeight.bold, fontSize: 16)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'e.g. Free T-Shirt & Lunch',
+              fillColor: const Color(0xFFF4FAFD),
+              filled: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF006C48), foregroundColor: Colors.white),
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isNotEmpty && !_perks.contains(text)) {
+                  setState(() {
+                    _perks.add(text);
+                  });
+                }
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -390,6 +590,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       _endTime.minute,
     );
 
+    final lat = !_isOnline ? double.tryParse(_latitudeController.text.trim()) : null;
+    final lon = !_isOnline ? double.tryParse(_longitudeController.text.trim()) : null;
+
     final result = widget.eventToEdit != null
         ? await eventService.updateEvent(
             token: auth.token!,
@@ -399,6 +602,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             category: _category,
             bannerUrl: _bannerUrl,
             address: _addressController.text.trim(),
+            latitude: lat,
+            longitude: lon,
             isOnline: _isOnline,
             startTime: startDateTime,
             endTime: endDateTime,
@@ -406,6 +611,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             minAge: int.parse(_minAgeController.text),
             isPaid: _isPaid,
             compensationDetails: _isPaid ? _compensationController.text.trim() : null,
+            openPositions: _openPositions,
+            perks: _perks,
           )
         : await eventService.createEvent(
             token: auth.token!,
@@ -414,6 +621,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             category: _category,
             bannerUrl: _bannerUrl,
             address: _addressController.text.trim(),
+            latitude: lat,
+            longitude: lon,
             isOnline: _isOnline,
             startTime: startDateTime,
             endTime: endDateTime,
@@ -421,6 +630,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             minAge: int.parse(_minAgeController.text),
             isPaid: _isPaid,
             compensationDetails: _isPaid ? _compensationController.text.trim() : null,
+            openPositions: _openPositions,
+            perks: _perks,
           );
 
     if (mounted) {
@@ -442,6 +653,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           _titleController.clear();
           _descriptionController.clear();
           _addressController.clear();
+          _latitudeController.clear();
+          _longitudeController.clear();
           _volunteersController.text = '10';
           _minAgeController.text = '16';
           _compensationController.clear();
@@ -453,6 +666,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             _startDate = DateTime.now().add(const Duration(days: 1));
             _startTime = const TimeOfDay(hour: 9, minute: 0);
             _endTime = const TimeOfDay(hour: 17, minute: 0);
+            _openPositions = [];
+            _perks = [];
           });
         }
       } else {
@@ -656,6 +871,58 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE8EFF1))),
                       ),
                     ),
+                    if (!_isOnline) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Latitude', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _latitudeController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  validator: (v) => !_isOnline && (v == null || v.trim().isEmpty || double.tryParse(v) == null) ? 'Enter latitude' : null,
+                                  decoration: InputDecoration(
+                                    hintText: 'e.g. 12.9716',
+                                    fillColor: Colors.white,
+                                    filled: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE8EFF1))),
+                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE8EFF1))),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Longitude', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                const SizedBox(height: 6),
+                                TextFormField(
+                                  controller: _longitudeController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  validator: (v) => !_isOnline && (v == null || v.trim().isEmpty || double.tryParse(v) == null) ? 'Enter longitude' : null,
+                                  decoration: InputDecoration(
+                                    hintText: 'e.g. 77.5946',
+                                    fillColor: Colors.white,
+                                    filled: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE8EFF1))),
+                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE8EFF1))),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 16),
 
                     // Date & Time pickers
@@ -688,7 +955,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,6 +979,34 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(_startTime.format(context)),
+                                      const Icon(Icons.access_time, size: 16, color: Color(0xFF006C48)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('End Time', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 6),
+                              InkWell(
+                                onTap: () => _selectTime(context, false),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFE8EFF1)),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(_endTime.format(context)),
                                       const Icon(Icons.access_time, size: 16, color: Color(0xFF006C48)),
                                     ],
                                   ),
@@ -803,6 +1102,113 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 24),
+                    Text('Open Positions', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE8EFF1)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_openPositions.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0),
+                              child: Text(
+                                'No custom positions added yet. Default campaign roles will be used.',
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _openPositions.map((pos) {
+                                return Chip(
+                                  label: Text(pos, style: const TextStyle(fontSize: 12, color: Color(0xFF012D1D))),
+                                  backgroundColor: const Color(0xFFCEE9D3),
+                                  deleteIcon: const Icon(Icons.close, size: 14, color: Color(0xFF012D1D)),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _openPositions.remove(pos);
+                                    });
+                                  },
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  side: BorderSide.none,
+                                );
+                              }).toList(),
+                            ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () => _addPositionDialog(context),
+                            icon: const Icon(Icons.add, size: 16, color: Color(0xFF006C48)),
+                            label: const Text('Add Custom Position', style: TextStyle(fontSize: 12, color: Color(0xFF006C48))),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF006C48)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+                    Text('Perks & Benefits', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE8EFF1)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_perks.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8.0),
+                              child: Text(
+                                'No custom perks added yet. Default perks will be shown.',
+                                style: TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _perks.map((perk) {
+                                return Chip(
+                                  label: Text(perk, style: const TextStyle(fontSize: 12, color: Color(0xFF0E6C4A))),
+                                  backgroundColor: const Color(0xFFE8EFF1),
+                                  deleteIcon: const Icon(Icons.close, size: 14, color: Color(0xFF0E6C4A)),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _perks.remove(perk);
+                                    });
+                                  },
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  side: BorderSide.none,
+                                );
+                              }).toList(),
+                            ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () => _addPerkDialog(context),
+                            icon: const Icon(Icons.add, size: 16, color: Color(0xFF006C48)),
+                            label: const Text('Add Custom Perk', style: TextStyle(fontSize: 12, color: Color(0xFF006C48))),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF006C48)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 32),
 
                     // Submit Button

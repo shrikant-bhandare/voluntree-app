@@ -13,6 +13,13 @@ class UserProfile {
   final int reputationScore;
   final String reputationLevel;
   final List<String> availability;
+  final String? bio;
+  final String? location;
+  final String? emergencyName;
+  final String? emergencyContact;
+  final String? educationOrJob;
+  final String? socialGithub;
+  final String? socialLinkedin;
 
   UserProfile({
     required this.id,
@@ -23,6 +30,13 @@ class UserProfile {
     required this.reputationScore,
     required this.reputationLevel,
     required this.availability,
+    this.bio,
+    this.location,
+    this.emergencyName,
+    this.emergencyContact,
+    this.educationOrJob,
+    this.socialGithub,
+    this.socialLinkedin,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -35,6 +49,13 @@ class UserProfile {
       reputationScore: json['reputationScore'] ?? 0,
       reputationLevel: json['reputationLevel'] ?? 'BRONZE',
       availability: List<String>.from(json['availability'] ?? []),
+      bio: json['bio'],
+      location: json['location'],
+      emergencyName: json['emergencyName'],
+      emergencyContact: json['emergencyContact'],
+      educationOrJob: json['educationOrJob'],
+      socialGithub: json['socialGithub'],
+      socialLinkedin: json['socialLinkedin'],
     );
   }
 }
@@ -238,6 +259,94 @@ class AuthService extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return {'success': false, 'message': 'Network connection failed: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    List<String>? skills,
+    List<String>? interests,
+    String? avatarUrl,
+    String? bio,
+    String? location,
+    String? emergencyName,
+    String? emergencyContact,
+    String? educationOrJob,
+    String? socialGithub,
+    String? socialLinkedin,
+    String? experienceLevel,
+    List<String>? availability,
+  }) async {
+    if (_token == null) {
+      return {'success': false, 'message': 'User is not authenticated.'};
+    }
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/auth/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          if (skills != null) 'skills': skills,
+          if (interests != null) 'interests': interests,
+          if (avatarUrl != null) 'avatarUrl': avatarUrl,
+          'bio': bio,
+          'location': location,
+          'emergencyName': emergencyName,
+          'emergencyContact': emergencyContact,
+          'educationOrJob': educationOrJob,
+          'socialGithub': socialGithub,
+          'socialLinkedin': socialLinkedin,
+          if (experienceLevel != null) 'experienceLevel': experienceLevel,
+          if (availability != null) 'availability': availability,
+        }),
+      );
+
+      _isLoading = false;
+      if (response.statusCode == 200) {
+        await fetchMe();
+        return {'success': true};
+      } else {
+        final data = jsonDecode(response.body);
+        notifyListeners();
+        return {'success': false, 'message': data['message'] ?? 'Failed to update profile'};
+      }
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      return {'success': false, 'message': 'Network connection failed: $e'};
+    }
+  }
+
+  Future<String?> uploadProfileImage(List<int> bytes, String filename) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/auth/upload'));
+      request.headers['Authorization'] = 'Bearer $_token';
+      
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return data['url'] as String?;
+      } else {
+        debugPrint('[AUTH SERVICE] Upload failed: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('[AUTH SERVICE] Upload connection error: $e');
+      return null;
     }
   }
 }

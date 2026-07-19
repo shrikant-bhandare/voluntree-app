@@ -83,10 +83,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _typingTimer?.cancel();
-    // Disconnect socket to release server handle
+    // Clear active chat recipient tracker
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final chatService = Provider.of<ChatService>(context, listen: false);
-      chatService.disconnectSocket();
       chatService.activeChatUserId = null; // Clear active tracker
     });
     super.dispose();

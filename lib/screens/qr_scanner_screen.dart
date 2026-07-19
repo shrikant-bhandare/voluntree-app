@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/auth_service.dart';
 import '../services/attendance_service.dart';
 
@@ -16,6 +17,31 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   final MobileScannerController _scannerController = MobileScannerController();
   bool _isVerifying = false;
   bool _isProcessingCode = false;
+  PermissionStatus? _cameraPermissionStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCameraPermission();
+  }
+
+  Future<void> _checkCameraPermission() async {
+    final status = await Permission.camera.status;
+    if (mounted) {
+      setState(() {
+        _cameraPermissionStatus = status;
+      });
+    }
+
+    if (status != PermissionStatus.granted) {
+      final requestStatus = await Permission.camera.request();
+      if (mounted) {
+        setState(() {
+          _cameraPermissionStatus = requestStatus;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -169,22 +195,91 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      MobileScanner(
-                        controller: _scannerController,
-                        onDetect: (capture) {
-                          if (_isProcessingCode) return;
-                          final List<Barcode> barcodes = capture.barcodes;
-                          for (final barcode in barcodes) {
-                            if (barcode.rawValue != null) {
-                              setState(() {
-                                _isProcessingCode = true;
-                              });
-                              _submitToken(barcode.rawValue!);
-                              break;
+                      if (_cameraPermissionStatus == null)
+                        const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                          ),
+                        )
+                      else if (_cameraPermissionStatus == PermissionStatus.granted)
+                        MobileScanner(
+                          controller: _scannerController,
+                          onDetect: (capture) {
+                            if (_isProcessingCode) return;
+                            final List<Barcode> barcodes = capture.barcodes;
+                            for (final barcode in barcodes) {
+                              if (barcode.rawValue != null) {
+                                setState(() {
+                                  _isProcessingCode = true;
+                                });
+                                _submitToken(barcode.rawValue!);
+                                break;
+                              }
                             }
-                          }
-                        },
-                      ),
+                          },
+                          errorBuilder: (context, error, child) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 40),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Camera Error: ${error.errorCode}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        )
+                      else
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.camera_alt_outlined, color: Color(0xFF94A3B8), size: 44),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Camera Access Required',
+                                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Please enable camera access to scan QR passes.',
+                                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 14),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    if (_cameraPermissionStatus == PermissionStatus.permanentlyDenied) {
+                                      await openAppSettings();
+                                    } else {
+                                      _checkCameraPermission();
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF6366F1),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    _cameraPermissionStatus == PermissionStatus.permanentlyDenied
+                                        ? 'Open Settings'
+                                        : 'Grant Access',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       // Overlay scan boundary line
                       Positioned(
                         top: 40,

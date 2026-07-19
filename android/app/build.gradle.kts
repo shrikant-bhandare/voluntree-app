@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.volunteerplatform.volunteer_mobile_app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.volunteerplatform.volunteer_mobile_app"
+        applicationId = "com.voluntree.mobileapp"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -44,4 +44,4 @@ flutter {
     source = "../.."
 }
 // Apply Google Services plugin at the bottom of the file
-apply plugin: 'com.google.gms.google-services'
+apply(plugin = "com.google.gms.google-services")

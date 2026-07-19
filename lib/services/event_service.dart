@@ -27,6 +27,8 @@ class EventModel {
   final int? matchScore;
   final int approvedCount;
   final bool isOrganizerVerified;
+  final List<String> openPositions;
+  final List<String> perks;
 
   EventModel({
     required this.id,
@@ -52,6 +54,8 @@ class EventModel {
     this.matchScore,
     this.approvedCount = 0,
     required this.isOrganizerVerified,
+    this.openPositions = const [],
+    this.perks = const [],
   });
 
   factory EventModel.fromJson(Map<String, dynamic> json) {
@@ -81,6 +85,8 @@ class EventModel {
       matchScore: json['matchScore'],
       approvedCount: json['approvedCount'] ?? 0,
       isOrganizerVerified: json['isOrganizerVerified'] ?? false,
+      openPositions: json['openPositions'] != null ? List<String>.from(json['openPositions']) : const [],
+      perks: json['perks'] != null ? List<String>.from(json['perks']) : const [],
     );
   }
 }
@@ -161,6 +167,8 @@ class EventService extends ChangeNotifier {
     int minAge = 16,
     bool isPaid = false,
     String? compensationDetails,
+    List<String> openPositions = const [],
+    List<String> perks = const [],
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -188,6 +196,8 @@ class EventService extends ChangeNotifier {
           'isPaid': isPaid,
           if (compensationDetails != null && compensationDetails.isNotEmpty)
             'compensationDetails': compensationDetails,
+          'openPositions': openPositions,
+          'perks': perks,
         }),
       );
 
@@ -367,6 +377,8 @@ class EventService extends ChangeNotifier {
     int minAge = 16,
     bool isPaid = false,
     String? compensationDetails,
+    List<String> openPositions = const [],
+    List<String> perks = const [],
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -394,6 +406,8 @@ class EventService extends ChangeNotifier {
           'isPaid': isPaid,
           if (isPaid && compensationDetails != null && compensationDetails.isNotEmpty)
             'compensationDetails': compensationDetails,
+          'openPositions': openPositions,
+          'perks': perks,
         }),
       );
 

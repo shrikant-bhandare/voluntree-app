@@ -9,6 +9,7 @@ import 'services/leaderboard_service.dart';
 import 'services/notification_service.dart';
 import 'services/report_service.dart';
 import 'services/payments_service.dart';
+import 'services/posts_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -43,6 +44,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => NotificationService()),
         ChangeNotifierProvider(create: (_) => ReportService()),
         ChangeNotifierProvider(create: (_) => PaymentsService()),
+        ChangeNotifierProvider(create: (_) => PostsService()),
       ],
       child: const MyApp(),
     ),

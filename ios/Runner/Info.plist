@@ -67,6 +67,8 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to scan QR codes for attendance verification.</string>
+	<string>This app needs camera access to scan QR codes for attendance verification and take event cover photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photo library to select event cover images.</string>
 </dict>
 </plist>

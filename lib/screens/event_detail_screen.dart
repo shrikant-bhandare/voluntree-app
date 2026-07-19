@@ -545,9 +545,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             supportTitle = 'General Volunteer';
                           }
 
-                           final leadSpots = (e.volunteersNeeded * 0.25).round().clamp(1, 50);
-                          final supportSpots = (e.volunteersNeeded - leadSpots).clamp(1, 200);
-
                           final bool hasApplied = myApp != null;
                           final String statusText = hasApplied
                               ? (myApp['status'] == 'APPROVED'
@@ -568,32 +565,70 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                           : const Color(0xFFEAB308))
                               : null;
 
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: _buildPositionBentoCard(
-                                  title: leadTitle,
-                                  spots: '$leadSpots spots left',
-                                  badgeText: 'Experience needed',
-                                  badgeColor: const Color(0xFFFD8704),
-                                  onTap: hasApplied ? null : () => _showApplyBottomSheet(leadTitle),
-                                  buttonText: statusText,
-                                  buttonColor: statusColor,
-                                ),
+                          final List<String> positionsToShow = e.openPositions.isNotEmpty
+                              ? e.openPositions
+                              : [leadTitle, supportTitle];
+                          
+                          final int spotsPerRole = (e.volunteersNeeded / positionsToShow.length).round().clamp(1, 100);
+
+                          List<Widget> positionRows = [];
+                          for (int i = 0; i < positionsToShow.length; i += 2) {
+                            final bool hasNext = i + 1 < positionsToShow.length;
+                            final pos1 = positionsToShow[i];
+                            final pos2 = hasNext ? positionsToShow[i + 1] : null;
+
+                            final isLead1 = pos1.toLowerCase().contains('lead') || pos1.toLowerCase().contains('coordinator') || pos1.toLowerCase().contains('director');
+                            final badgeColor1 = isLead1 ? const Color(0xFFFD8704) : const Color(0xFF006C48);
+                            final badgeText1 = isLead1 ? 'Experience needed' : 'Beginner friendly';
+
+                            positionRows.add(
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildPositionBentoCard(
+                                      title: pos1,
+                                      spots: '$spotsPerRole spots left',
+                                      badgeText: badgeText1,
+                                      badgeColor: badgeColor1,
+                                      onTap: hasApplied ? null : () => _showApplyBottomSheet(pos1),
+                                      buttonText: statusText,
+                                      buttonColor: statusColor,
+                                    ),
+                                  ),
+                                  if (pos2 != null) ...[
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Builder(
+                                        builder: (context) {
+                                          final isLead2 = pos2.toLowerCase().contains('lead') || pos2.toLowerCase().contains('coordinator') || pos2.toLowerCase().contains('director');
+                                          final badgeColor2 = isLead2 ? const Color(0xFFFD8704) : const Color(0xFF006C48);
+                                          final badgeText2 = isLead2 ? 'Experience needed' : 'Beginner friendly';
+                                          return _buildPositionBentoCard(
+                                            title: pos2,
+                                            spots: '$spotsPerRole spots left',
+                                            badgeText: badgeText2,
+                                            badgeColor: badgeColor2,
+                                            onTap: hasApplied ? null : () => _showApplyBottomSheet(pos2),
+                                            buttonText: statusText,
+                                            buttonColor: statusColor,
+                                          );
+                                        }
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    const SizedBox(width: 12),
+                                    const Expanded(child: SizedBox()),
+                                  ],
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildPositionBentoCard(
-                                  title: supportTitle,
-                                  spots: '$supportSpots spots left',
-                                  badgeText: 'Beginner friendly',
-                                  badgeColor: const Color(0xFF006C48),
-                                  onTap: hasApplied ? null : () => _showApplyBottomSheet(supportTitle),
-                                  buttonText: statusText,
-                                  buttonColor: statusColor,
-                                ),
-                              ),
-                            ],
+                            );
+                            if (hasNext) {
+                              positionRows.add(const SizedBox(height: 12));
+                            }
+                          }
+
+                          return Column(
+                            children: positionRows,
                           );
                         }
                       ),
@@ -610,12 +645,27 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: [
-                          _buildPerkChip('Certificate Provided', Icons.school),
-                          _buildPerkChip('Free Lunch & Water', Icons.restaurant),
-                          _buildPerkChip('Eco Badges XP', Icons.eco),
-                          _buildPerkChip('Networking Opportunity', Icons.people),
-                        ],
+                        children: (e.perks.isNotEmpty ? e.perks : [
+                          'Certificate Provided',
+                          'Free Lunch & Water',
+                          'Eco Badges XP',
+                          'Networking Opportunity'
+                        ]).map((perk) {
+                          IconData perkIcon = Icons.card_giftcard;
+                          final lower = perk.toLowerCase();
+                          if (lower.contains('cert')) {
+                            perkIcon = Icons.school;
+                          } else if (lower.contains('lunch') || lower.contains('food') || lower.contains('water') || lower.contains('meal')) {
+                            perkIcon = Icons.restaurant;
+                          } else if (lower.contains('eco') || lower.contains('badge') || lower.contains('green')) {
+                            perkIcon = Icons.eco;
+                          } else if (lower.contains('network') || lower.contains('peop') || lower.contains('meet')) {
+                            perkIcon = Icons.people;
+                          } else if (lower.contains('travel') || lower.contains('stipend') || lower.contains('money') || lower.contains('pay')) {
+                            perkIcon = Icons.monetization_on;
+                          }
+                          return _buildPerkChip(perk, perkIcon);
+                        }).toList(),
                       ),
                       const SizedBox(height: 30),
 
