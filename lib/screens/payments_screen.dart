@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/payments_service.dart';
+import '../widgets/responsive.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key});
@@ -22,7 +24,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Provider.of<AuthService>(context, listen: false);
       if (auth.token != null) {
-        Provider.of<PaymentsService>(context, listen: false).fetchHistory(auth.token!);
+        Provider.of<PaymentsService>(
+          context,
+          listen: false,
+        ).fetchHistory(auth.token!);
       }
     });
   }
@@ -37,7 +42,12 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthService>(context);
     final payments = Provider.of<PaymentsService>(context);
-    final isOrganizer = auth.currentUser?.userType == 'ORGANIZER';
+    // Premium plans are sold only to verified NGO hosts; the API returns 403
+    // for everyone else, so do not offer them a purchase flow.
+    final userType = auth.currentUser?.userType;
+    final canSubscribe =
+        (userType == 'ORGANIZER' || userType == 'ADMIN') &&
+        auth.currentUser?.isVerified == true;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -49,7 +59,11 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         title: Text(
           'Payments & Donations',
           style: GoogleFonts.plusJakartaSans(
-            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+            textStyle: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
         ),
         centerTitle: true,
@@ -60,7 +74,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           indicatorColor: const Color(0xFF6366F1),
           labelColor: Colors.white,
           unselectedLabelColor: const Color(0xFF64748B),
-          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          labelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
           tabs: const [
             Tab(text: 'DONATE'),
             Tab(text: 'SUBSCRIBE'),
@@ -68,13 +85,16 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildDonateTab(auth, payments),
-          _buildSubscribeTab(auth, payments, isOrganizer),
-          _buildHistoryTab(payments),
-        ],
+      body: ResponsiveCenter(
+        maxWidth: 840,
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            _buildDonateTab(auth, payments),
+            _buildSubscribeTab(auth, payments, canSubscribe),
+            _buildHistoryTab(payments),
+          ],
+        ),
       ),
     );
   }
@@ -101,16 +121,28 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.volunteer_activism, color: Colors.white, size: 36),
+                const Icon(
+                  Icons.volunteer_activism,
+                  color: Colors.white,
+                  size: 36,
+                ),
                 const SizedBox(height: 12),
                 const Text(
                   'Make a Difference',
-                  style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Your donation powers local NGOs and volunteer drives across communities.',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13, height: 1.5),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
@@ -118,7 +150,11 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           const SizedBox(height: 28),
           const Text(
             'Select Amount (₹)',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -133,7 +169,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E293B),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.4)),
+                    border: Border.all(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                    ),
                   ),
                   child: Center(
                     child: Text(
@@ -162,11 +200,17 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             decoration: BoxDecoration(
               color: const Color(0xFF10B981).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+              border: Border.all(
+                color: const Color(0xFF10B981).withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.shield_outlined, color: Color(0xFF10B981), size: 20),
+                const Icon(
+                  Icons.shield_outlined,
+                  color: Color(0xFF10B981),
+                  size: 20,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -185,7 +229,11 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     );
   }
 
-  void _handleDonate(AuthService auth, PaymentsService payments, double amount) async {
+  void _handleDonate(
+    AuthService auth,
+    PaymentsService payments,
+    double amount,
+  ) async {
     if (auth.token == null) return;
 
     final result = await payments.createDonation(auth.token!, amount);
@@ -193,7 +241,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     if (!mounted) return;
 
     if (result['success'] == true) {
-      _showPaymentGatewayDialog(auth, payments, result['txRef'], amount);
+      _showCheckoutDialog(result['txRef'], amount, result['checkoutUrl']);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -204,20 +252,29 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     }
   }
 
-  void _showPaymentGatewayDialog(
-    AuthService auth,
-    PaymentsService payments,
-    String txRef,
-    double amount,
-  ) {
+  /// Settlement happens only through the gateway's signed webhook (or an
+  /// admin), never from the app — so all the app can do is hand the user to
+  /// the checkout page and refresh history afterwards. The previous dialog
+  /// called a removed /payments/verify endpoint and then announced
+  /// "Payment successful" regardless of the result.
+  void _showCheckoutDialog(String txRef, double amount, String? checkoutUrl) {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final paymentsService = Provider.of<PaymentsService>(
+      context,
+      listen: false,
+    );
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
-          'Mock Payment Gateway',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          'Complete your payment',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -241,64 +298,133 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   const SizedBox(height: 6),
                   Text(
                     'Ref: $txRef',
-                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                    style: const TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             const Text(
-              'Simulate a payment outcome:',
+              'You will be taken to the secure checkout page. Your payment '
+              'history updates once the gateway confirms the transaction.',
               style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await payments.verifyTransaction(auth.token!, txRef, 'FAILED');
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Payment failed or cancelled.'), backgroundColor: Colors.redAccent),
-              );
-            },
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Not now',
+              style: TextStyle(color: Color(0xFF64748B)),
+            ),
           ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await payments.verifyTransaction(auth.token!, txRef, 'SUCCESS');
+              final uri = checkoutUrl != null
+                  ? Uri.tryParse(checkoutUrl)
+                  : null;
+              var launched = false;
+              if (uri != null) {
+                try {
+                  launched = await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                  );
+                } catch (_) {
+                  launched = false;
+                }
+              }
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('✓ Payment successful! Thank you for your donation.'),
-                  backgroundColor: Color(0xFF10B981),
-                ),
-              );
+              if (!launched) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Checkout is not available right now. The transaction '
+                      'was recorded as pending — please try again later.',
+                    ),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+              if (auth.token != null) {
+                await paymentsService.fetchHistory(auth.token!);
+              }
+              if (!mounted) return;
               _tabController.animateTo(2); // Jump to History
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF10B981),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            child: const Text('Pay Now', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Continue to checkout',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSubscribeTab(AuthService auth, PaymentsService payments, bool isOrganizer) {
+  Widget _buildSubscribeTab(
+    AuthService auth,
+    PaymentsService payments,
+    bool canSubscribe,
+  ) {
+    if (!canSubscribe) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.workspace_premium_outlined,
+                size: 56,
+                color: Color(0xFF64748B),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Premium plans are for verified NGO hosts',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Once your organization is verified by an administrator, '
+                'subscription plans appear here.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
           const SizedBox(height: 8),
           Text(
-            isOrganizer ? 'Unlock Premium Organizer Tools' : 'Go Premium Volunteer',
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            'Unlock Premium Organizer Tools',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
@@ -312,9 +438,12 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             title: 'Monthly Plan',
             price: '₹499',
             period: '/month',
-            features: isOrganizer
-                ? ['Featured event listings', 'Priority applicant filtering', 'Verified organizer badge', 'Advanced analytics']
-                : ['Priority event matching', 'Certificate priority queue', 'Exclusive campaigns access', 'Ad-free experience'],
+            features: const [
+              'Featured event listings',
+              'Priority applicant filtering',
+              'Verified organizer badge',
+              'Advanced analytics',
+            ],
             accent: const Color(0xFF6366F1),
             onSubscribe: () => _handleSubscribe(auth, payments, 'MONTHLY'),
           ),
@@ -324,9 +453,12 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             price: '₹4,999',
             period: '/year',
             saving: 'Save ₹989',
-            features: isOrganizer
-                ? ['All Monthly features', 'Unlimited event campaigns', 'Donation tracking dashboard', 'API access for integrations']
-                : ['All Monthly features', 'Lifetime leaderboard badge', 'Priority customer support', 'Early access to new features'],
+            features: const [
+              'All Monthly features',
+              'Unlimited event campaigns',
+              'Donation tracking dashboard',
+              'API access for integrations',
+            ],
             accent: const Color(0xFFD97706),
             onSubscribe: () => _handleSubscribe(auth, payments, 'ANNUAL'),
           ),
@@ -335,7 +467,11 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     );
   }
 
-  void _handleSubscribe(AuthService auth, PaymentsService payments, String plan) async {
+  void _handleSubscribe(
+    AuthService auth,
+    PaymentsService payments,
+    String plan,
+  ) async {
     if (auth.token == null) return;
 
     final result = await payments.createSubscription(auth.token!, plan);
@@ -344,7 +480,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
 
     if (result['success'] == true) {
       final amount = plan == 'ANNUAL' ? 4999.0 : 499.0;
-      _showPaymentGatewayDialog(auth, payments, result['txRef'], amount);
+      _showCheckoutDialog(result['txRef'], amount, result['checkoutUrl']);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -385,11 +521,19 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined, size: 64, color: Colors.white.withValues(alpha: 0.2)),
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 64,
+              color: Colors.white.withValues(alpha: 0.2),
+            ),
             const SizedBox(height: 16),
             Text(
               'No transactions yet',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 16, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -433,19 +577,29 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                     if (record.eventTitle != null) ...[
                       const SizedBox(height: 2),
                       Text(
                         record.eventTitle!,
-                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                        style: const TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                     const SizedBox(height: 4),
                     Text(
-                      '${record.createdAt.day.toString().padLeft(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][record.createdAt.month - 1]} ${record.createdAt.year}',
-                      style: const TextStyle(color: Color(0xFF475569), fontSize: 11),
+                      '${record.createdAt.day.toString().padLeft(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][record.createdAt.month - 1]} ${record.createdAt.year}',
+                      style: const TextStyle(
+                        color: Color(0xFF475569),
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -455,17 +609,24 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                 children: [
                   Text(
                     '${record.currency} ${record.amount.toStringAsFixed(2)}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: isSuccess
                           ? const Color(0xFF10B981).withValues(alpha: 0.15)
                           : isPending
-                              ? const Color(0xFFEAB308).withValues(alpha: 0.15)
-                              : const Color(0xFFEF4444).withValues(alpha: 0.15),
+                          ? const Color(0xFFEAB308).withValues(alpha: 0.15)
+                          : const Color(0xFFEF4444).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -476,8 +637,8 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                         color: isSuccess
                             ? const Color(0xFF10B981)
                             : isPending
-                                ? const Color(0xFFEAB308)
-                                : const Color(0xFFEF4444),
+                            ? const Color(0xFFEAB308)
+                            : const Color(0xFFEF4444),
                       ),
                     ),
                   ),
@@ -525,15 +686,32 @@ class _PlanCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               if (saving != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF10B981).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(saving!, style: const TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    saving!,
+                    style: const TextStyle(
+                      color: Color(0xFF10B981),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -542,21 +720,39 @@ class _PlanCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(price, style: TextStyle(color: accent, fontSize: 32, fontWeight: FontWeight.bold)),
-              Text(period, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+              Text(
+                price,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                period,
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              ),
             ],
           ),
           const Divider(color: Color(0xFF334155), height: 24),
-          ...features.map((f) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle_outline, color: accent, size: 16),
-                const SizedBox(width: 10),
-                Text(f, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 13)),
-              ],
+          ...features.map(
+            (f) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: accent, size: 16),
+                  const SizedBox(width: 10),
+                  Text(
+                    f,
+                    style: const TextStyle(
+                      color: Color(0xFFCBD5E1),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          )),
+          ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -566,9 +762,14 @@ class _PlanCard extends StatelessWidget {
                 backgroundColor: accent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('Subscribe Now', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              child: const Text(
+                'Subscribe Now',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
           ),
         ],
@@ -591,6 +792,12 @@ class _CustomDonateInputState extends State<_CustomDonateInput> {
   final _controller = TextEditingController();
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Row(
       children: [
@@ -603,7 +810,10 @@ class _CustomDonateInputState extends State<_CustomDonateInput> {
               hintText: 'Enter amount (e.g. 750)',
               hintStyle: const TextStyle(color: Color(0xFF475569)),
               prefixText: '₹ ',
-              prefixStyle: const TextStyle(color: Color(0xFF6366F1), fontWeight: FontWeight.bold),
+              prefixStyle: const TextStyle(
+                color: Color(0xFF6366F1),
+                fontWeight: FontWeight.bold,
+              ),
               filled: true,
               fillColor: const Color(0xFF1E293B),
               border: OutlineInputBorder(
@@ -627,20 +837,29 @@ class _CustomDonateInputState extends State<_CustomDonateInput> {
             final amount = double.tryParse(_controller.text.trim());
             if (amount == null || amount <= 0) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enter a valid amount'), backgroundColor: Colors.redAccent),
+                const SnackBar(
+                  content: Text('Enter a valid amount'),
+                  backgroundColor: Colors.redAccent,
+                ),
               );
               return;
             }
-            context.findAncestorStateOfType<_PaymentsScreenState>()
+            context
+                .findAncestorStateOfType<_PaymentsScreenState>()
                 ?._handleDonate(widget.auth, widget.payments, amount);
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF6366F1),
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-          child: const Text('Donate', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: const Text(
+            'Donate',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
       ],
     );

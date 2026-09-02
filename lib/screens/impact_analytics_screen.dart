@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
+import '../widgets/responsive.dart';
 
 class ImpactAnalyticsScreen extends StatefulWidget {
   const ImpactAnalyticsScreen({super.key});
@@ -23,7 +24,10 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
   void _fetchAnalytics() {
     final auth = Provider.of<AuthService>(context, listen: false);
     if (auth.token != null) {
-      Provider.of<EventService>(context, listen: false).fetchOrganizerAnalytics(auth.token!);
+      Provider.of<EventService>(
+        context,
+        listen: false,
+      ).fetchOrganizerAnalytics(auth.token!);
     }
   }
 
@@ -46,14 +50,20 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
     }
 
     // Fallbacks
-    final double totalHours = (analytics?['totalHours'] as num?)?.toDouble() ?? 0.0;
+    final double totalHours =
+        (analytics?['totalHours'] as num?)?.toDouble() ?? 0.0;
     final int activeVolunteers = analytics?['activeVolunteers'] ?? 0;
-    final double completionRate = (analytics?['completionRate'] as num?)?.toDouble() ?? 0.0;
-    final List<dynamic> categoryBreakdown = analytics?['categoryBreakdown'] ?? [];
+    final double completionRate =
+        (analytics?['completionRate'] as num?)?.toDouble() ?? 0.0;
+    final List<dynamic> categoryBreakdown =
+        analytics?['categoryBreakdown'] ?? [];
     final List<dynamic> monthlyTrend = analytics?['monthlyTrend'] ?? [];
 
     // Calculate total events for category percentage
-    final int totalEvents = categoryBreakdown.fold(0, (sum, item) => sum + (item['count'] as int));
+    final int totalEvents = categoryBreakdown.fold(
+      0,
+      (sum, item) => sum + (item['count'] as int),
+    );
 
     // Calculate max value for trend normalization
     final int maxTrendCount = monthlyTrend.fold(1, (max, item) {
@@ -89,180 +99,224 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () async => _fetchAnalytics(),
-        color: const Color(0xFF0e6c4a),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Screen Title & Subtitle
-              Text(
-                'Chapter Impact',
-                style: GoogleFonts.plusJakartaSans(
-                  textStyle: TextStyle(color: theme.colorScheme.primary, fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                "Real-time measurement of your NGO's growth and contributions.",
-                style: TextStyle(color: Color(0xFF717973), fontSize: 13),
-              ),
-              const SizedBox(height: 24),
-    
-              // Bento Metric Cards Grid
-              _buildStatMetricCard(
-                title: 'TOTAL CONTRIBUTION HOURS',
-                value: totalHours.toStringAsFixed(1),
-                trend: 'Real-time verified logs',
-                icon: Icons.schedule,
-                accentColor: const Color(0xFF0E6C4A),
-                theme: theme,
-              ),
-              const SizedBox(height: 16),
-              _buildStatMetricCard(
-                title: 'ACTIVE VOLUNTEERS',
-                value: '$activeVolunteers',
-                trend: 'Unique attendees checked in',
-                icon: Icons.people_alt,
-                accentColor: const Color(0xFFFD8704),
-                theme: theme,
-              ),
-              const SizedBox(height: 16),
-              _buildStatMetricCard(
-                title: 'DRIVE COMPLETION RATE',
-                value: '${completionRate.toStringAsFixed(1)}%',
-                trend: 'Events successfully closed',
-                icon: Icons.task_alt,
-                accentColor: theme.colorScheme.primary,
-                theme: theme,
-              ),
-              const SizedBox(height: 28),
-    
-              // Category Breakdown Chart Bento Card
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE8EFF1)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Category Distributions',
-                      style: GoogleFonts.plusJakartaSans(
-                        textStyle: TextStyle(color: theme.colorScheme.primary, fontSize: 15, fontWeight: FontWeight.bold),
-                      ),
+      body: ResponsiveCenter(
+        maxWidth: 1000,
+        child: RefreshIndicator(
+          onRefresh: () async => _fetchAnalytics(),
+          color: const Color(0xFF0e6c4a),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Screen Title & Subtitle
+                Text(
+                  'Chapter Impact',
+                  style: GoogleFonts.plusJakartaSans(
+                    textStyle: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 4),
-                    const Text('Drives breakdown by volunteer categories', style: TextStyle(color: Color(0xFF717973), fontSize: 11)),
-                    const SizedBox(height: 20),
-    
-                    if (categoryBreakdown.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Center(
-                          child: Text('No categories data available', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        ),
-                      )
-                    else
-                      ...categoryBreakdown.map((item) {
-                        final catName = item['category'] as String;
-                        final count = item['count'] as int;
-                        final double pct = totalEvents > 0 ? (count / totalEvents) : 0.0;
-                        final pctStr = '${(pct * 100).round()}%';
-                        
-                        Color barColor = const Color(0xFF0e6c4a);
-                        if (catName.contains('Support')) barColor = const Color(0xFFFD8704);
-                        if (catName.contains('Health')) barColor = const Color(0xFF012D1D);
-                        if (catName.contains('Education')) barColor = const Color(0xFF2196F3);
-                        if (catName.contains('Animal')) barColor = const Color(0xFFE91E63);
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "Real-time measurement of your NGO's growth and contributions.",
+                  style: TextStyle(color: Color(0xFF717973), fontSize: 13),
+                ),
+                const SizedBox(height: 24),
 
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildCategoryProgressRow(catName, pct, pctStr, barColor),
-                        );
-                      }),
-                  ],
+                // Bento Metric Cards Grid
+                _buildStatMetricCard(
+                  title: 'TOTAL CONTRIBUTION HOURS',
+                  value: totalHours.toStringAsFixed(1),
+                  trend: 'Real-time verified logs',
+                  icon: Icons.schedule,
+                  accentColor: const Color(0xFF0E6C4A),
+                  theme: theme,
                 ),
-              ),
-              const SizedBox(height: 24),
-    
-              // Monthly Trend Chart Card
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE8EFF1)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
-                  ],
+                const SizedBox(height: 16),
+                _buildStatMetricCard(
+                  title: 'ACTIVE VOLUNTEERS',
+                  value: '$activeVolunteers',
+                  trend: 'Unique attendees checked in',
+                  icon: Icons.people_alt,
+                  accentColor: const Color(0xFFFD8704),
+                  theme: theme,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Volunteer Turnout',
-                      style: GoogleFonts.plusJakartaSans(
-                        textStyle: TextStyle(color: theme.colorScheme.primary, fontSize: 15, fontWeight: FontWeight.bold),
+                const SizedBox(height: 16),
+                _buildStatMetricCard(
+                  title: 'DRIVE COMPLETION RATE',
+                  value: '${completionRate.toStringAsFixed(1)}%',
+                  trend: 'Events successfully closed',
+                  icon: Icons.task_alt,
+                  accentColor: theme.colorScheme.primary,
+                  theme: theme,
+                ),
+                const SizedBox(height: 28),
+
+                // Category Breakdown Chart Bento Card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE8EFF1)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text('Monthly active attendees trend', style: TextStyle(color: Color(0xFF717973), fontSize: 11)),
-                    const SizedBox(height: 24),
-    
-                    if (monthlyTrend.isEmpty)
-                      const SizedBox(
-                        height: 140,
-                        child: Center(
-                          child: Text('No trend data available', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        ),
-                      )
-                    else
-                      SizedBox(
-                        height: 140,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: monthlyTrend.map((item) {
-                            final month = item['month'] as String;
-                            final count = item['count'] as int;
-                            final double pct = count / maxTrendCount;
-                            return _buildChartBar(month, pct, count, theme);
-                          }).toList(),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Category Distributions',
+                        style: GoogleFonts.plusJakartaSans(
+                          textStyle: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                  ],
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Drives breakdown by volunteer categories',
+                        style: TextStyle(
+                          color: Color(0xFF717973),
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      if (categoryBreakdown.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              'No categories data available',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ...categoryBreakdown.map((item) {
+                          final catName = item['category'] as String;
+                          final count = item['count'] as int;
+                          final double pct = totalEvents > 0
+                              ? (count / totalEvents)
+                              : 0.0;
+                          final pctStr = '${(pct * 100).round()}%';
+
+                          Color barColor = const Color(0xFF0e6c4a);
+                          if (catName.contains('Support'))
+                            barColor = const Color(0xFFFD8704);
+                          if (catName.contains('Health'))
+                            barColor = const Color(0xFF012D1D);
+                          if (catName.contains('Education'))
+                            barColor = const Color(0xFF2196F3);
+                          if (catName.contains('Animal'))
+                            barColor = const Color(0xFFE91E63);
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildCategoryProgressRow(
+                              catName,
+                              pct,
+                              pctStr,
+                              barColor,
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
-    
-              // Export Report Action Button
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                const SizedBox(height: 24),
+
+                // Monthly Trend Chart Card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE8EFF1)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Volunteer Turnout',
+                        style: GoogleFonts.plusJakartaSans(
+                          textStyle: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Monthly active attendees trend',
+                        style: TextStyle(
+                          color: Color(0xFF717973),
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      if (monthlyTrend.isEmpty)
+                        const SizedBox(
+                          height: 140,
+                          child: Center(
+                            child: Text(
+                              'No trend data available',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        SizedBox(
+                          height: 140,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: monthlyTrend.map((item) {
+                              final month = item['month'] as String;
+                              final count = item['count'] as int;
+                              final double pct = count / maxTrendCount;
+                              return _buildChartBar(month, pct, count, theme);
+                            }).toList(),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Generating PDF Report...')),
-                  );
-                },
-                icon: const Icon(Icons.download, size: 20),
-                label: const Text('Export Full PDF Report', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(height: 40),
-            ],
+                const SizedBox(height: 32),
+
+                // "Export PDF" only showed a snackbar; removed until a real
+                // export exists.
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
@@ -284,7 +338,11 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE8EFF1)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Row(
@@ -300,7 +358,12 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
                     Text(
                       title,
                       style: GoogleFonts.plusJakartaSans(
-                        textStyle: const TextStyle(color: Color(0xFF717973), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                        textStyle: const TextStyle(
+                          color: Color(0xFF717973),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
                       ),
                     ),
                   ],
@@ -309,7 +372,11 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
                 Text(
                   value,
                   style: GoogleFonts.plusJakartaSans(
-                    textStyle: TextStyle(color: theme.colorScheme.primary, fontSize: 32, fontWeight: FontWeight.bold),
+                    textStyle: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -319,7 +386,11 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
                     const SizedBox(width: 4),
                     Text(
                       trend,
-                      style: TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: accentColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -339,15 +410,34 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
     );
   }
 
-  Widget _buildCategoryProgressRow(String category, double value, String percentStr, Color barColor) {
+  Widget _buildCategoryProgressRow(
+    String category,
+    double value,
+    String percentStr,
+    Color barColor,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(category, style: const TextStyle(color: Color(0xFF161D1F), fontSize: 12, fontWeight: FontWeight.bold)),
-            Text(percentStr, style: TextStyle(color: barColor, fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(
+              category,
+              style: const TextStyle(
+                color: Color(0xFF161D1F),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              percentStr,
+              style: TextStyle(
+                color: barColor,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -364,7 +454,12 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
     );
   }
 
-  Widget _buildChartBar(String month, double heightPct, int count, ThemeData theme) {
+  Widget _buildChartBar(
+    String month,
+    double heightPct,
+    int count,
+    ThemeData theme,
+  ) {
     return Tooltip(
       message: '$count volunteers',
       child: Column(
@@ -372,7 +467,11 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
         children: [
           Text(
             '$count',
-            style: TextStyle(color: theme.colorScheme.primary, fontSize: 9, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: theme.colorScheme.primary,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 4),
           Container(
@@ -384,7 +483,14 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(month, style: const TextStyle(color: Color(0xFF717973), fontSize: 11, fontWeight: FontWeight.bold)),
+          Text(
+            month,
+            style: const TextStyle(
+              color: Color(0xFF717973),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );

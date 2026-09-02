@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import '../config.dart';
 import '../services/auth_service.dart';
+import '../widgets/responsive.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -70,13 +73,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final authService = Provider.of<AuthService>(context, listen: false);
-    
+
     final skillsList = _skillsController.text
         .split(',')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
-        
+
     final interestsList = _interestsController.text
         .split(',')
         .map((s) => s.trim())
@@ -109,7 +112,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profile updated successfully!'),
-            backgroundColor: Color(0xFF0E6C4A), // Voluntree Primary/Secondary Green
+            backgroundColor: Color(
+              0xFF0E6C4A,
+            ), // Voluntree Primary/Secondary Green
           ),
         );
         Navigator.of(context).pop();
@@ -124,13 +129,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  Future<void> _pickAndUploadAvatar(BuildContext context, ImageSource source) async {
+  Future<void> _pickAndUploadAvatar(
+    BuildContext context,
+    ImageSource source,
+  ) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final authService = Provider.of<AuthService>(context, listen: false);
     bool hasPermission = false;
-    
+
     try {
-      if (source == ImageSource.camera) {
+      if (kIsWeb) {
+        // Browsers gate camera/file access through their own prompts.
+        hasPermission = true;
+      } else if (source == ImageSource.camera) {
         final status = await Permission.camera.request();
         if (status.isGranted) {
           hasPermission = true;
@@ -138,14 +149,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           await openAppSettings();
         }
       } else {
-        if (Platform.isIOS) {
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
           final status = await Permission.photos.request();
           if (status.isGranted || status.isLimited) {
             hasPermission = true;
           } else if (status.isPermanentlyDenied) {
             await openAppSettings();
           }
-        } else if (Platform.isAndroid) {
+        } else if (defaultTargetPlatform == TargetPlatform.android) {
           final status = await Permission.photos.request();
           if (status.isGranted) {
             hasPermission = true;
@@ -169,7 +180,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!hasPermission) {
       scaffoldMessenger.showSnackBar(
         const SnackBar(
-          content: Text('Permission denied. Please grant permission in settings to upload.'),
+          content: Text(
+            'Permission denied. Please grant permission in settings to upload.',
+          ),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -190,17 +203,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       });
 
       final bytes = await image.readAsBytes();
-      final uploadedUrl = await authService.uploadProfileImage(bytes, image.name);
+      final uploadedUrl = await authService.uploadProfileImage(
+        bytes,
+        image.name,
+      );
 
       if (uploadedUrl != null) {
+        if (!mounted) return;
         setState(() {
-          _avatarUrl = uploadedUrl;
+          _avatarUrl = AppConfig.formatMediaUrl(uploadedUrl);
           _isUploadingAvatar = false;
         });
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             const SnackBar(
-              content: Text('Avatar uploaded successfully! Click Save Changes to apply.'),
+              content: Text(
+                'Avatar uploaded successfully! Click Save Changes to apply.',
+              ),
               backgroundColor: Color(0xFF0E6C4A),
             ),
           );
@@ -211,6 +230,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       debugPrint('[AVATAR UPLOAD ERROR] $e');
     }
 
+    if (!mounted) return;
     setState(() {
       _isUploadingAvatar = false;
     });
@@ -268,238 +288,316 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         title: Text(
           'Edit Profile Details',
           style: GoogleFonts.plusJakartaSans(
-            textStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontSize: 18,
+            ),
           ),
         ),
         backgroundColor: theme.colorScheme.primary,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Tell the community about yourself',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
+      body: ResponsiveCenter(
+        maxWidth: 760,
+        child: Stack(
+          children: [
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Tell the community about yourself',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                   const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                  // Profile Picture Uploader
-                  Center(
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 54,
-                          backgroundColor: const Color(0xFFE8EFF1),
-                          backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
-                              ? NetworkImage(_avatarUrl!)
-                              : null,
-                          child: _avatarUrl == null || _avatarUrl!.isEmpty
-                              ? Icon(Icons.person, size: 54, color: theme.colorScheme.primary)
-                              : null,
-                        ),
-                        if (_isUploadingAvatar)
-                          Positioned.fill(
-                            child: Container(
-                              decoration: const BoxDecoration(
-                                color: Colors.black45,
-                                shape: BoxShape.circle,
+                    // Profile Picture Uploader
+                    Center(
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 54,
+                            backgroundColor: const Color(0xFFE8EFF1),
+                            backgroundImage:
+                                _avatarUrl != null && _avatarUrl!.isNotEmpty
+                                ? NetworkImage(_avatarUrl!)
+                                : null,
+                            child: _avatarUrl == null || _avatarUrl!.isEmpty
+                                ? Icon(
+                                    Icons.person,
+                                    size: 54,
+                                    color: theme.colorScheme.primary,
+                                  )
+                                : null,
+                          ),
+                          if (_isUploadingAvatar)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  color: Colors.black45,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () => _showAvatarPickerOptions(context),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  size: 18,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
                           ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: GestureDetector(
-                            onTap: () => _showAvatarPickerOptions(context),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                              ),
-                              child: const Icon(
-                                Icons.camera_alt,
-                                size: 18,
-                                color: Colors.white,
-                              ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Bio field
+                    _buildSectionHeader('Biography'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _bioController,
+                      maxLines: 4,
+                      maxLength: 250,
+                      decoration: _buildInputDecoration(
+                        'Describe your passion, experiences, or volunteering goals...',
+                        Icons.description_outlined,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Location & Occupation
+                    _buildSectionHeader('Personal Details'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _locationController,
+                      decoration: _buildInputDecoration(
+                        'Location (e.g. San Francisco, CA)',
+                        Icons.location_on_outlined,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _educationOrJobController,
+                      decoration: _buildInputDecoration(
+                        'Education or Occupation (e.g. Student at Stanford)',
+                        Icons.work_outline,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Volunteer Profile Details
+                    _buildSectionHeader('Volunteer Profile Details'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _skillsController,
+                      decoration: _buildInputDecoration(
+                        'Skills (comma-separated, e.g. teaching, first aid)',
+                        Icons.bolt,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _interestsController,
+                      decoration: _buildInputDecoration(
+                        'Interests (comma-separated, e.g. environment, health)',
+                        Icons.favorite_border,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _availabilityController,
+                      decoration: _buildInputDecoration(
+                        'Availability (comma-separated, e.g. weekends, evenings)',
+                        Icons.calendar_month,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Experience Level Dropdown
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4FAFD),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFFE8EFF1),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButtonFormField<String>(
+                          value: _experienceLevel,
+                          decoration: const InputDecoration(
+                            labelText: 'Experience Level',
+                            labelStyle: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                            border: InputBorder.none,
+                            prefixIcon: Icon(
+                              Icons.star_outline,
+                              size: 20,
+                              color: Colors.grey,
                             ),
                           ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'BEGINNER',
+                              child: Text('Beginner'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'INTERMEDIATE',
+                              child: Text('Intermediate'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'EXPERIENCED',
+                              child: Text('Experienced'),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                _experienceLevel = val;
+                              });
+                            }
+                          },
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Bio field
-                  _buildSectionHeader('Biography'),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _bioController,
-                    maxLines: 4,
-                    maxLength: 250,
-                    decoration: _buildInputDecoration(
-                      'Describe your passion, experiences, or volunteering goals...',
-                      Icons.description_outlined,
-                      theme,
-                    ),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Location & Occupation
-                  _buildSectionHeader('Personal Details'),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _locationController,
-                    decoration: _buildInputDecoration('Location (e.g. San Francisco, CA)', Icons.location_on_outlined, theme),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _educationOrJobController,
-                    decoration: _buildInputDecoration('Education or Occupation (e.g. Student at Stanford)', Icons.work_outline, theme),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Volunteer Profile Details
-                  _buildSectionHeader('Volunteer Profile Details'),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _skillsController,
-                    decoration: _buildInputDecoration('Skills (comma-separated, e.g. teaching, first aid)', Icons.bolt, theme),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _interestsController,
-                    decoration: _buildInputDecoration('Interests (comma-separated, e.g. environment, health)', Icons.favorite_border, theme),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _availabilityController,
-                    decoration: _buildInputDecoration('Availability (comma-separated, e.g. weekends, evenings)', Icons.calendar_month, theme),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Experience Level Dropdown
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4FAFD),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE8EFF1), width: 1.5),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButtonFormField<String>(
-                        value: _experienceLevel,
-                        decoration: const InputDecoration(
-                          labelText: 'Experience Level',
-                          labelStyle: TextStyle(fontSize: 12, color: Colors.grey),
-                          border: InputBorder.none,
-                          prefixIcon: Icon(Icons.star_outline, size: 20, color: Colors.grey),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'BEGINNER', child: Text('Beginner')),
-                          DropdownMenuItem(value: 'INTERMEDIATE', child: Text('Intermediate')),
-                          DropdownMenuItem(value: 'EXPERIENCED', child: Text('Experienced')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _experienceLevel = val;
-                            });
-                          }
-                        },
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                  // Emergency contact details
-                  _buildSectionHeader('Emergency Contact (Private)'),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _emergencyNameController,
-                    decoration: _buildInputDecoration('Contact Name', Icons.person_outline, theme),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _emergencyContactController,
-                    keyboardType: TextInputType.phone,
-                    decoration: _buildInputDecoration('Contact Phone Number', Icons.phone_outlined, theme),
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Social handles
-                  _buildSectionHeader('Social Profiles'),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _socialGithubController,
-                    decoration: _buildInputDecoration('GitHub URL (e.g. github.com/username)', Icons.code, theme),
-                    style: const TextStyle(fontSize: 14),
-                    keyboardType: TextInputType.url,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _socialLinkedinController,
-                    decoration: _buildInputDecoration('LinkedIn URL (e.g. linkedin.com/in/username)', Icons.link, theme),
-                    style: const TextStyle(fontSize: 14),
-                    keyboardType: TextInputType.url,
-                  ),
-                  const SizedBox(height: 40),
-
-                  // Save button
-                  ElevatedButton(
-                    onPressed: isLoading ? null : _saveProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
+                    // Emergency contact details
+                    _buildSectionHeader('Emergency Contact (Private)'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _emergencyNameController,
+                      decoration: _buildInputDecoration(
+                        'Contact Name',
+                        Icons.person_outline,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
                     ),
-                    child: Text(
-                      'Save Changes',
-                      style: GoogleFonts.plusJakartaSans(
-                        textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _emergencyContactController,
+                      keyboardType: TextInputType.phone,
+                      decoration: _buildInputDecoration(
+                        'Contact Phone Number',
+                        Icons.phone_outlined,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Social handles
+                    _buildSectionHeader('Social Profiles'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _socialGithubController,
+                      decoration: _buildInputDecoration(
+                        'GitHub URL (e.g. github.com/username)',
+                        Icons.code,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _socialLinkedinController,
+                      decoration: _buildInputDecoration(
+                        'LinkedIn URL (e.g. linkedin.com/in/username)',
+                        Icons.link,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 40),
+
+                    // Save button
+                    ElevatedButton(
+                      onPressed: isLoading ? null : _saveProfile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Save Changes',
+                        style: GoogleFonts.plusJakartaSans(
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (isLoading)
-            Container(
-              color: Colors.white30,
-              child: const Center(
-                child: CircularProgressIndicator(),
+            if (isLoading)
+              Container(
+                color: Colors.white30,
+                child: const Center(child: CircularProgressIndicator()),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -517,7 +615,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  InputDecoration _buildInputDecoration(String hintText, IconData icon, ThemeData theme) {
+  InputDecoration _buildInputDecoration(
+    String hintText,
+    IconData icon,
+    ThemeData theme,
+  ) {
     return InputDecoration(
       hintText: hintText,
       hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),

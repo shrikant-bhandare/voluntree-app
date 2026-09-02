@@ -51,12 +51,14 @@ Map<String, String> _generateRSAKeysInBackground(int strength) {
   final random = Random.secure();
   final seeds = List<int>.generate(32, (_) => random.nextInt(256));
   secureRandom.seed(pc.KeyParameter(Uint8List.fromList(seeds)));
-  
+
   // Using certainty 20 for faster prime generation while remaining cryptographically secure
-  keyGen.init(pc.ParametersWithRandom(
-    RSAKeyGeneratorParameters(BigInt.parse('65537'), strength, 20),
-    secureRandom,
-  ));
+  keyGen.init(
+    pc.ParametersWithRandom(
+      RSAKeyGeneratorParameters(BigInt.parse('65537'), strength, 20),
+      secureRandom,
+    ),
+  );
 
   final pair = keyGen.generateKeyPair();
   final pubKey = pair.publicKey as RSAPublicKey;
@@ -89,7 +91,7 @@ class EncryptionHelper {
   // Generate RSA Key pair and save JSON strings to SharedPreferences
   static Future<Map<String, String>> generateAndSaveKeys() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Check if keys already exist
     final storedPub = prefs.getString('e2ee_public_key');
     final storedPriv = prefs.getString('e2ee_private_key');
@@ -102,7 +104,7 @@ class EncryptionHelper {
       }
       return {'publicKey': storedPub, 'privateKey': storedPriv};
     }
-    
+
     // Generate new RSA-2048 keypair in a background isolate
     final keys = await compute(_generateRSAKeysInBackground, 2048);
     final pubJson = keys['publicKey']!;
@@ -115,7 +117,9 @@ class EncryptionHelper {
     try {
       _cachedPrivateKey = rsaPrivateKeyFromJson(privJson);
     } catch (e) {
-      debugPrint('[CRYPTO HELPER] Error caching newly generated private key: $e');
+      debugPrint(
+        '[CRYPTO HELPER] Error caching newly generated private key: $e',
+      );
     }
 
     return {'publicKey': pubJson, 'privateKey': privJson};
@@ -148,7 +152,7 @@ class EncryptionHelper {
       final random = Random.secure();
       final aesKeyBytes = List<int>.generate(32, (_) => random.nextInt(256));
       final ivBytes = List<int>.generate(16, (_) => random.nextInt(256));
-      
+
       final aesKey = Key(Uint8List.fromList(aesKeyBytes));
       final iv = IV(Uint8List.fromList(ivBytes));
 
@@ -165,23 +169,23 @@ class EncryptionHelper {
       // 3. Encrypt symmetric key info (AES key + IV) using RSA Public Key
       final recipientPublicKey = rsaPublicKeyFromJson(recipientPublicKeyJson);
       final rsaEncrypter = Encrypter(RSA(publicKey: recipientPublicKey));
-      
+
       final keyBundle = jsonEncode({
         'key': base64.encode(aesKey.bytes),
         'iv': base64.encode(iv.bytes),
       });
-      
+
       final encryptedKeyBundle = rsaEncrypter.encrypt(keyBundle);
 
       final result = {
         'ciphertext': encryptedContent.base64,
         'encryptedKey': encryptedKeyBundle.base64,
       };
-      
+
       if (fileCt != null) {
         result['fileCt'] = fileCt;
       }
-      
+
       return result;
     } catch (e) {
       debugPrint('[CRYPTO HELPER] Encryption Error: $e');
@@ -205,15 +209,17 @@ class EncryptionHelper {
       } else {
         privateKey = rsaPrivateKeyFromJson(privateKeyJson);
       }
-      
+
       // 1. Decrypt AES key bundle using RSA private key
       final rsaEncrypter = Encrypter(RSA(privateKey: privateKey));
-      final decryptedKeyBundleJson = rsaEncrypter.decrypt(Encrypted.fromBase64(encryptedKey));
-      
+      final decryptedKeyBundleJson = rsaEncrypter.decrypt(
+        Encrypted.fromBase64(encryptedKey),
+      );
+
       final Map<String, dynamic> bundle = jsonDecode(decryptedKeyBundleJson);
       final aesKeyBytes = base64.decode(bundle['key']!);
       final ivBytes = base64.decode(bundle['iv']!);
-      
+
       final aesKey = Key(aesKeyBytes);
       final iv = IV(ivBytes);
 

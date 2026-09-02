@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
+import 'api_helpers.dart';
 
 class UserProfile {
   final String id;
@@ -42,7 +43,7 @@ class UserProfile {
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
       id: json['id'] ?? '',
-      avatarUrl: json['avatarUrl'],
+      avatarUrl: AppConfig.formatMediaUrl(json['avatarUrl']),
       skills: List<String>.from(json['skills'] ?? []),
       interests: List<String>.from(json['interests'] ?? []),
       experienceLevel: json['experienceLevel'] ?? 'BEGINNER',
@@ -87,14 +88,16 @@ class UserInfo {
       fullName: json['fullName'] ?? '',
       userType: json['userType'] ?? 'VOLUNTEER',
       isVerified: json['isVerified'] ?? false,
-      profile: json['profile'] != null ? UserProfile.fromJson(json['profile']) : null,
+      profile: json['profile'] != null
+          ? UserProfile.fromJson(json['profile'])
+          : null,
     );
   }
 }
 
 class AuthService extends ChangeNotifier {
   static String get baseUrl => AppConfig.baseUrl;
-  
+
   String? _token;
   UserInfo? _currentUser;
   bool _isLoading = false;
@@ -111,10 +114,25 @@ class AuthService extends ChangeNotifier {
   Future<void> _loadSession() async {
     final prefs = await SharedPreferences.getInstance();
     final savedToken = prefs.getString('access_token');
-    if (savedToken != null) {
-      _token = savedToken;
-      // Validate token and fetch current profile details
+    if (savedToken == null) return;
+
+    // Surface the restore as a loading state so AuthGate shows its splash
+    // instead of flashing LoginScreen and then swapping to HomeScreen.
+    _isLoading = true;
+    _token = savedToken;
+    notifyListeners();
+    try {
+      // Validate token and fetch current profile details. One transient
+      // network error must not strand a valid 7-day session on the login
+      // screen, so retry once before giving up.
       await fetchMe();
+      if (_currentUser == null && _token != null) {
+        await Future.delayed(const Duration(seconds: 2));
+        await fetchMe();
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -139,15 +157,17 @@ class AuthService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/auth/me'),
-        headers: {
-          'Authorization': 'Bearer $_token',
-        },
+        headers: {'Authorization': 'Bearer $_token'},
       );
       if (response.statusCode == 200) {
         _currentUser = UserInfo.fromJson(jsonDecode(response.body));
         notifyListeners();
-      } else {
+      } else if (response.statusCode == 401 || response.statusCode == 403) {
+        // The session itself is invalid (expired, banned, deleted).
         await logout();
+      } else {
+        // 5xx / 429 mean the server is unhealthy, not the session. Keep it.
+        debugPrint('FetchMe unexpected status ${response.statusCode}');
       }
     } catch (e) {
       // Keep session local if offline, or handle connection error
@@ -155,11 +175,13 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Every account starts as a volunteer. Organizer access is granted by the
+  /// NGO verification flow, so the role is not part of this request — the
+  /// server would reject it anyway.
   Future<Map<String, dynamic>> register({
     required String email,
     String? phoneNumber,
     required String fullName,
-    required String userType, // VOLUNTEER or ORGANIZER
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -169,9 +191,9 @@ class AuthService extends ChangeNotifier {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': email,
-          if (phoneNumber != null && phoneNumber.isNotEmpty) 'phoneNumber': phoneNumber,
+          if (phoneNumber != null && phoneNumber.isNotEmpty)
+            'phoneNumber': phoneNumber,
           'fullName': fullName,
-          'userType': userType,
         }),
       );
 
@@ -182,7 +204,10 @@ class AuthService extends ChangeNotifier {
       if (response.statusCode == 201) {
         return {'success': true, 'message': data['message']};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Registration failed'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Registration failed'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -203,7 +228,8 @@ class AuthService extends ChangeNotifier {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           if (email != null && email.isNotEmpty) 'email': email,
-          if (phoneNumber != null && phoneNumber.isNotEmpty) 'phoneNumber': phoneNumber,
+          if (phoneNumber != null && phoneNumber.isNotEmpty)
+            'phoneNumber': phoneNumber,
         }),
       );
 
@@ -215,10 +241,13 @@ class AuthService extends ChangeNotifier {
         return {
           'success': true,
           'message': data['message'],
-          'otpInDev': data['otpInDev'] // Retained for local developer testing
+          'otpInDev': data['otpInDev'], // Retained for local developer testing
         };
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Failed to request OTP'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to request OTP'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -240,7 +269,8 @@ class AuthService extends ChangeNotifier {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           if (email != null && email.isNotEmpty) 'email': email,
-          if (phoneNumber != null && phoneNumber.isNotEmpty) 'phoneNumber': phoneNumber,
+          if (phoneNumber != null && phoneNumber.isNotEmpty)
+            'phoneNumber': phoneNumber,
           'code': code,
         }),
       );
@@ -253,12 +283,57 @@ class AuthService extends ChangeNotifier {
         await _saveSession(data['accessToken'], data['user']);
         return {'success': true};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'OTP verification failed'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'OTP verification failed'),
+        };
       }
     } catch (e) {
       _isLoading = false;
       notifyListeners();
       return {'success': false, 'message': 'Network connection failed: $e'};
+    }
+  }
+
+  /// Social sign-in.
+  ///
+  /// Only the provider's ID token is sent. The server verifies its signature
+  /// and reads the email and name from the token — the client cannot assert
+  /// who it is, which is what made the old email-only version an open door.
+  Future<Map<String, dynamic>> ssoLogin({
+    required String idToken,
+    required String provider,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/sso'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'idToken': idToken, 'provider': provider}),
+      );
+
+      final data = jsonDecode(response.body);
+      _isLoading = false;
+      notifyListeners();
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await _saveSession(data['accessToken'], data['user']);
+        return {'success': true, 'user': data['user']};
+      } else {
+        return {
+          'success': false,
+          'message': apiMessage(data, 'SSO authentication failed'),
+        };
+      }
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      return {
+        'success': false,
+        'message': 'Network error during SSO authentication: $e',
+      };
     }
   }
 
@@ -283,26 +358,33 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Only send what the caller provided: a null here erased the stored
+      // value on the server (@IsOptional accepts null and Prisma stores it).
+      final bodyData = <String, dynamic>{};
+      if (bio != null) bodyData['bio'] = bio;
+      if (location != null) bodyData['location'] = location;
+      if (emergencyName != null) bodyData['emergencyName'] = emergencyName;
+      if (emergencyContact != null) {
+        bodyData['emergencyContact'] = emergencyContact;
+      }
+      if (educationOrJob != null) bodyData['educationOrJob'] = educationOrJob;
+      if (socialGithub != null) bodyData['socialGithub'] = socialGithub;
+      if (socialLinkedin != null) bodyData['socialLinkedin'] = socialLinkedin;
+      if (skills != null) bodyData['skills'] = skills;
+      if (interests != null) bodyData['interests'] = interests;
+      if (avatarUrl != null) bodyData['avatarUrl'] = avatarUrl;
+      if (experienceLevel != null) {
+        bodyData['experienceLevel'] = experienceLevel;
+      }
+      if (availability != null) bodyData['availability'] = availability;
+
       final response = await http.put(
         Uri.parse('$baseUrl/auth/profile'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_token',
         },
-        body: jsonEncode({
-          if (skills != null) 'skills': skills,
-          if (interests != null) 'interests': interests,
-          if (avatarUrl != null) 'avatarUrl': avatarUrl,
-          'bio': bio,
-          'location': location,
-          'emergencyName': emergencyName,
-          'emergencyContact': emergencyContact,
-          'educationOrJob': educationOrJob,
-          'socialGithub': socialGithub,
-          'socialLinkedin': socialLinkedin,
-          if (experienceLevel != null) 'experienceLevel': experienceLevel,
-          if (availability != null) 'availability': availability,
-        }),
+        body: jsonEncode(bodyData),
       );
 
       _isLoading = false;
@@ -312,7 +394,10 @@ class AuthService extends ChangeNotifier {
       } else {
         final data = jsonDecode(response.body);
         notifyListeners();
-        return {'success': false, 'message': data['message'] ?? 'Failed to update profile'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to update profile'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -321,17 +406,105 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Uploads a verification document to the private bucket
+  /// (POST /ngos/upload). The returned URL is what the verification request
+  /// must reference — the API rejects public-bucket or external links.
+  Future<String?> uploadPrivateDocument(
+    List<int> bytes,
+    String filename,
+  ) async {
+    if (_token == null) return null;
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/ngos/upload'),
+      );
+      request.headers['Authorization'] = 'Bearer $_token';
+      request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
+      );
+      final response = await http.Response.fromStream(await request.send());
+      if (response.statusCode == 201) {
+        return jsonDecode(response.body)['url'] as String?;
+      }
+      debugPrint('[AUTH SERVICE] Document upload failed: ${response.body}');
+    } catch (e) {
+      debugPrint('[AUTH SERVICE] Document upload error: $e');
+    }
+    return null;
+  }
+
+  /// GET /ngos/my-verification → `{status: PENDING|APPROVED|REJECTED|null}`.
+  Future<Map<String, dynamic>?> fetchMyVerification() async {
+    if (_token == null) return null;
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/ngos/my-verification'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      }
+    } catch (e) {
+      debugPrint('[AUTH SERVICE] fetchMyVerification error: $e');
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> submitNgoVerification({
+    required String ngoName,
+    required String contactDetails,
+    required String registrationDocs,
+    required String identityProof,
+  }) async {
+    if (_token == null) {
+      return {'success': false, 'message': 'User is not authenticated.'};
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/ngos/verify-request'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'ngoName': ngoName,
+          'contactDetails': contactDetails,
+          'registrationDocs': registrationDocs,
+          'identityProof': identityProof,
+        }),
+      );
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {'success': true};
+      }
+      dynamic data;
+      try {
+        data = jsonDecode(response.body);
+      } catch (_) {
+        data = null;
+      }
+      return {
+        'success': false,
+        'message': apiMessage(
+          data,
+          'Submission failed (HTTP ${response.statusCode})',
+        ),
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Network connection failed: $e'};
+    }
+  }
+
   Future<String?> uploadProfileImage(List<int> bytes, String filename) async {
     try {
-      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/auth/upload'));
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/auth/upload'),
+      );
       request.headers['Authorization'] = 'Bearer $_token';
-      
+
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: filename,
-        ),
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
       );
 
       final streamedResponse = await request.send();

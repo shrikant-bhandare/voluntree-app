@@ -19,10 +19,7 @@ class ReportService extends ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'category': category,
-          'reason': reason,
-        }),
+        body: jsonEncode({'category': category, 'reason': reason}),
       );
 
       if (response.statusCode == 201) {

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../config.dart';
+import 'api_helpers.dart';
 
 class NotificationItem {
   final String id;
@@ -25,15 +25,18 @@ class NotificationItem {
       title: json['title'] ?? '',
       body: json['body'] ?? '',
       isRead: json['isRead'] ?? false,
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: parseServerDate(json['createdAt']),
     );
   }
 }
 
+/// Inbox state. Real-time delivery arrives on the chat socket
+/// (`ChatService.onNotificationReceived` → [pushRealtime]); this service no
+/// longer opens a socket of its own, which used to mark the user offline for
+/// their chat partners every time the inbox screen opened or closed.
 class NotificationService extends ChangeNotifier {
   static String get baseUrl => AppConfig.baseUrl;
 
-  io.Socket? _socket;
   List<NotificationItem> _notifications = [];
   bool _isLoading = false;
   bool _hasUnread = false;
@@ -45,47 +48,25 @@ class NotificationService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get hasUnread => _hasUnread;
 
-  // Initialize socket for real-time notification alerts
-  void initSocket(String token) {
-    if (_socket != null) {
-      _socket!.disconnect();
+  /// Called with the payload of a `receiveNotification` socket event.
+  void pushRealtime(Map<String, dynamic> data) {
+    final newNotif = NotificationItem.fromJson(data);
+    if (newNotif.id.isNotEmpty &&
+        _notifications.any((n) => n.id == newNotif.id)) {
+      return;
     }
-
-    _socket = io.io(
-      baseUrl,
-      io.OptionBuilder()
-          .setTransports(['websocket'])
-          .setQuery({'token': token})
-          .enableForceNew()
-          .build(),
-    );
-
-    _socket!.onConnect((_) {
-      debugPrint('[NOTIFICATION SERVICE] Socket connected.');
-    });
-
-    // Listen for incoming real-time notifications
-    _socket!.on('receiveNotification', (data) {
-      debugPrint('[NOTIFICATION SERVICE] Real-time notification received: $data');
-      final newNotif = NotificationItem.fromJson(data);
-      _notifications.insert(0, newNotif);
-      _hasUnread = true;
-      notifyListeners();
-      
-      // Trigger callback if registered
-      if (onNotificationReceived != null) {
-        onNotificationReceived!(newNotif);
-      }
-    });
-
-    _socket!.connect();
+    _notifications.insert(0, newNotif);
+    _hasUnread = true;
+    notifyListeners();
+    onNotificationReceived?.call(newNotif);
   }
 
-  void disconnectSocket() {
-    if (_socket != null) {
-      _socket!.disconnect();
-      _socket = null;
-    }
+  /// Forget the previous account's inbox on logout.
+  void clear() {
+    _notifications = [];
+    _hasUnread = false;
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<void> fetchNotifications(String token) async {
@@ -95,14 +76,14 @@ class NotificationService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/notifications'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        _notifications = data.map((json) => NotificationItem.fromJson(json)).toList();
+        final data = unwrapList(jsonDecode(response.body));
+        _notifications = data
+            .map((json) => NotificationItem.fromJson(json))
+            .toList();
         _hasUnread = _notifications.any((n) => !n.isRead);
       } else {
         _notifications = [];
@@ -120,9 +101,7 @@ class NotificationService extends ChangeNotifier {
     try {
       final response = await http.patch(
         Uri.parse('$baseUrl/notifications/$notificationId/read'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {

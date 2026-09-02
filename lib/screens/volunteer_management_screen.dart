@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../widgets/animated_button.dart';
+import '../widgets/responsive.dart';
 import 'direct_chat_screen.dart';
 import 'create_event_screen.dart';
 
@@ -18,7 +19,8 @@ class VolunteerManagementScreen extends StatefulWidget {
   });
 
   @override
-  State<VolunteerManagementScreen> createState() => _VolunteerManagementScreenState();
+  State<VolunteerManagementScreen> createState() =>
+      _VolunteerManagementScreenState();
 }
 
 class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
@@ -52,8 +54,12 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
       _isLoading = true;
     });
 
-    final apps = await eventService.fetchEventApplications(auth.token!, widget.eventId);
+    final apps = await eventService.fetchEventApplications(
+      auth.token!,
+      widget.eventId,
+    );
 
+    if (!mounted) return;
     setState(() {
       _applications = apps;
       _isLoading = false;
@@ -73,7 +79,11 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
-    final result = await eventService.updateApplicationStatus(auth.token!, applicationId, status);
+    final result = await eventService.updateApplicationStatus(
+      auth.token!,
+      applicationId,
+      status,
+    );
 
     if (mounted) {
       Navigator.of(context).pop(); // dismiss loading dialog
@@ -83,62 +93,80 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
           SnackBar(content: Text('Application $status successfully.')),
         );
         _loadApplications(); // reload
+        // The dashboard counts and the event's FULL/ACTIVE state come from
+        // separate feeds — refresh them too, or they go stale until restart.
+        eventService.fetchOrganizerApplications(auth.token!);
+        eventService.fetchMyEvents(auth.token!);
+        eventService.fetchEvents();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Failed to update application status.')),
+          SnackBar(
+            content: Text(
+              result['message'] ?? 'Failed to update application status.',
+            ),
+          ),
         );
       }
     }
   }
 
-  Future<void> _confirmDeleteEvent(BuildContext context) async {
+  Future<void> _confirmDeleteEvent() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final eventService = Provider.of<EventService>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    if (auth.token == null) return;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.white,
         title: const Text('Delete Event'),
-        content: const Text('Are you sure you want to permanently delete this event? This will also delete all related applications and attendance data. This action cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to permanently delete this event? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && mounted) {
-      final auth = Provider.of<AuthService>(context, listen: false);
-      final eventService = Provider.of<EventService>(context, listen: false);
-
-      if (auth.token == null) return;
-
+    if (confirmed != true || !mounted) return;
+    {
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      final result = await eventService.deleteEvent(auth.token!, widget.eventId);
+      final result = await eventService.deleteEvent(
+        auth.token!,
+        widget.eventId,
+      );
 
       if (mounted) {
-        Navigator.of(context).pop(); // dismiss loading spinner
+        navigator.pop(); // dismiss loading spinner
 
         if (result['success']) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
             const SnackBar(content: Text('Event deleted successfully.')),
           );
           // Go back to the dashboard and trigger events list refresh
           eventService.fetchEvents();
-          Navigator.of(context).pop(true);
+          navigator.pop(true);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(result['message'] ?? 'Failed to delete event.')),
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Failed to delete event.'),
+            ),
           );
         }
       }
@@ -149,8 +177,12 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final pending = _applications.where((app) => app['status'] == 'PENDING').toList();
-    final confirmed = _applications.where((app) => app['status'] == 'APPROVED').toList();
+    final pending = _applications
+        .where((app) => app['status'] == 'PENDING')
+        .toList();
+    final confirmed = _applications
+        .where((app) => app['status'] == 'APPROVED')
+        .toList();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -166,31 +198,56 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
             icon: const Icon(Icons.edit_outlined, color: Color(0xFF0e6c4a)),
             tooltip: 'Edit Event',
             onPressed: () async {
-              final eventService = Provider.of<EventService>(context, listen: false);
-              try {
-                final event = eventService.events.firstWhere((e) => e.id == widget.eventId);
-                
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CreateEventScreen(eventToEdit: event),
+              final eventService = Provider.of<EventService>(
+                context,
+                listen: false,
+              );
+              // Captured before the async gaps below.
+              final messenger = ScaffoldMessenger.of(context);
+              final navigator = Navigator.of(context);
+              // FULL/COMPLETED events are absent from the public list, so
+              // look in the organizer's own list first and fall back to the
+              // API before giving up.
+              EventModel? event;
+              for (final source in [
+                eventService.myEvents,
+                eventService.events,
+              ]) {
+                try {
+                  event = source.firstWhere((e) => e.id == widget.eventId);
+                  break;
+                } catch (_) {
+                  event = null;
+                }
+              }
+              event ??= await eventService.fetchEventById(widget.eventId);
+              if (!mounted) return;
+              if (event == null) {
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Error: Could not retrieve event details for editing.',
+                    ),
                   ),
                 );
-                
-                if (result == true) {
-                  _loadApplications();
-                }
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Error: Could not retrieve event details for editing.')),
-                );
+                return;
+              }
+
+              final result = await navigator.push(
+                MaterialPageRoute(
+                  builder: (context) => CreateEventScreen(eventToEdit: event),
+                ),
+              );
+
+              if (result == true && mounted) {
+                _loadApplications();
               }
             },
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
             tooltip: 'Delete Event',
-            onPressed: () => _confirmDeleteEvent(context),
+            onPressed: () => _confirmDeleteEvent(),
           ),
         ],
         title: Column(
@@ -220,26 +277,38 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
           unselectedLabelColor: const Color(0xFF717973),
           indicatorColor: theme.colorScheme.primary,
           indicatorWeight: 3,
-          labelStyle: GoogleFonts.plusJakartaSans(textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          labelStyle: GoogleFonts.plusJakartaSans(
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
           tabs: [
             Tab(text: 'Pending (${pending.length})'),
             Tab(text: 'Confirmed (${confirmed.length})'),
           ],
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildApplicationsList(pending, true, theme),
-                _buildApplicationsList(confirmed, false, theme),
-              ],
-            ),
+      body: ResponsiveCenter(
+        maxWidth: 1000,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildApplicationsList(pending, true, theme),
+                  _buildApplicationsList(confirmed, false, theme),
+                ],
+              ),
+      ),
     );
   }
 
-  Widget _buildApplicationsList(List<Map<String, dynamic>> items, bool isPending, ThemeData theme) {
+  Widget _buildApplicationsList(
+    List<Map<String, dynamic>> items,
+    bool isPending,
+    ThemeData theme,
+  ) {
     if (items.isEmpty) {
       return Center(
         child: Padding(
@@ -250,15 +319,21 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
               Icon(Icons.group_outlined, size: 64, color: Colors.grey[350]),
               const SizedBox(height: 16),
               Text(
-                isPending ? 'No pending applications' : 'No confirmed volunteers yet',
-                style: const TextStyle(color: Color(0xFF012D1D), fontSize: 15, fontWeight: FontWeight.bold),
+                isPending
+                    ? 'No pending applications'
+                    : 'No confirmed volunteers yet',
+                style: const TextStyle(
+                  color: Color(0xFF012D1D),
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 6),
               const Text(
                 'New registrations will show up here immediately.',
                 style: TextStyle(color: Color(0xFF717973), fontSize: 12),
                 textAlign: TextAlign.center,
-              )
+              ),
             ],
           ),
         ),
@@ -271,13 +346,15 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
       itemCount: items.length,
       itemBuilder: (context, index) {
         final app = items[index];
-        final userObj = app['user'] ?? {};
+        // The API names the relation `volunteer`; `user` was always empty.
+        final userObj = app['volunteer'] ?? {};
         final profile = userObj['profile'] ?? {};
         final name = userObj['fullName'] ?? 'Anonymous Volunteer';
         final email = userObj['email'] ?? '';
         final role = app['roleRequested'] ?? 'Helper';
-        final message = app['message'] ?? 'Eager to contribute and support the team!';
-        final repScore = profile['reputationScore'] ?? 100;
+        final message =
+            app['message'] ?? 'Eager to contribute and support the team!';
+        final repScore = profile['reputationScore'] ?? 0;
         final repLevel = profile['reputationLevel'] ?? 'BRONZE';
 
         return Container(
@@ -288,7 +365,11 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFFE8EFF1)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
           child: Column(
@@ -302,7 +383,10 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                     backgroundColor: theme.colorScheme.secondaryContainer,
                     child: Text(
                       name[0].toUpperCase(),
-                      style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -314,11 +398,19 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                           children: [
                             Text(
                               name,
-                              style: const TextStyle(color: Color(0xFF161D1F), fontWeight: FontWeight.bold, fontSize: 13),
+                              style: const TextStyle(
+                                color: Color(0xFF161D1F),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                             if (!isPending) ...[
                               const SizedBox(width: 4),
-                              const Icon(Icons.check_circle, color: Color(0xFF006C48), size: 14),
+                              const Icon(
+                                Icons.check_circle,
+                                color: Color(0xFF006C48),
+                                size: 14,
+                              ),
                             ],
                             const SizedBox(width: 8),
                             PremiumAnimatedButton(
@@ -333,13 +425,20 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                                   ),
                                 );
                               },
-                              child: const Icon(Icons.chat_bubble_outline, color: Color(0xFF0e6c4a), size: 14),
+                              child: const Icon(
+                                Icons.chat_bubble_outline,
+                                color: Color(0xFF0e6c4a),
+                                size: 14,
+                              ),
                             ),
                           ],
                         ),
                         Text(
                           email,
-                          style: const TextStyle(color: Color(0xFF717973), fontSize: 11),
+                          style: const TextStyle(
+                            color: Color(0xFF717973),
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                     ),
@@ -348,20 +447,31 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF4FAFD),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           '$repScore pts',
-                          style: const TextStyle(color: Color(0xFF0e6c4a), fontWeight: FontWeight.bold, fontSize: 10),
+                          style: const TextStyle(
+                            color: Color(0xFF0e6c4a),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         repLevel.replaceAll('_', ' '),
-                        style: const TextStyle(color: Color(0xFF717973), fontSize: 8, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          color: Color(0xFF717973),
+                          fontSize: 8,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
@@ -374,28 +484,56 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
               // Position / Role details
               Row(
                 children: [
-                  const Text('ROLE REQUESTED: ', style: TextStyle(color: Color(0xFF717973), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                  const Text(
+                    'ROLE REQUESTED: ',
+                    style: TextStyle(
+                      color: Color(0xFF717973),
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.secondaryContainer,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       role,
-                      style: TextStyle(color: theme.colorScheme.primary, fontSize: 9, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  )
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
 
               // Candidate note / message statement
-              const Text('STATEMENT / NOTES:', style: TextStyle(color: Color(0xFF717973), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              const Text(
+                'STATEMENT / NOTES:',
+                style: TextStyle(
+                  color: Color(0xFF717973),
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
               const SizedBox(height: 4),
               Text(
                 '"$message"',
-                style: const TextStyle(color: Color(0xFF414844), fontStyle: FontStyle.italic, fontSize: 12, height: 1.4),
+                style: const TextStyle(
+                  color: Color(0xFF414844),
+                  fontStyle: FontStyle.italic,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
               ),
 
               // Action buttons if pending
@@ -413,7 +551,14 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                             border: Border.all(color: Colors.red[200]!),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: Text('Reject', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red[700])),
+                          child: Text(
+                            'Reject',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red[700],
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -428,7 +573,14 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                             color: const Color(0xFF0e6c4a),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Text('Approve', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                          child: const Text(
+                            'Approve',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                     ),

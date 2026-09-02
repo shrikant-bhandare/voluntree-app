@@ -1,20 +1,74 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' as io;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, kReleaseMode;
 
+/// Environment configuration.
+///
+/// The API host comes from a compile-time define so the same source builds for
+/// local, staging and production without editing code:
+///
+///   flutter run   --dart-define=API_BASE_URL=http://10.0.2.2:3000
+///   flutter build --dart-define=API_BASE_URL=https://api.voluntree.org
 class AppConfig {
-  // Flag to globally enable or disable End-to-End Encryption (E2EE)
+  /// End-to-end encryption is scaffolded but not finished. It stays off until
+  /// key exchange and recovery are implemented — a half-wired flag would imply
+  /// a guarantee the app does not make.
   static const bool enableE2EE = false;
 
-  // Centralized base URL configuration.
-  // Dynamically detects environment (Web vs Emulator vs iOS/Desktop).
+  static const String _configuredBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: '',
+  );
+
+  /// Android emulators reach the host machine on 10.0.2.2, never localhost.
+  static const String _androidDevFallback = 'http://10.0.2.2:3000';
+  static const String _defaultDevFallback = 'http://localhost:3000';
+
   static String get baseUrl {
-    if (kIsWeb) {
-      return 'https://voluntree-backend-tuin.onrender.com';
+    if (_configuredBaseUrl.isNotEmpty) {
+      return _stripTrailingSlash(_configuredBaseUrl);
     }
-    if (io.Platform.isAndroid) {
-      // 10.0.2.2 is the special IP mapped to host localhost in Android Emulator
-      return 'https://voluntree-backend-tuin.onrender.com';
+
+    if (kReleaseMode) {
+      throw StateError(
+        'API_BASE_URL was not provided at build time. Rebuild with '
+        '--dart-define=API_BASE_URL=https://your-api-host',
+      );
     }
-    return 'https://voluntree-backend-tuin.onrender.com';
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return _androidDevFallback;
+    }
+    return _defaultDevFallback;
+  }
+
+  /// True when talking to the API over plaintext HTTP. Release builds must not.
+  static bool get isInsecureTransport => !baseUrl.startsWith('https://');
+
+  static String _stripTrailingSlash(String url) =>
+      url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+
+  /// Rewrite any media URL so it resolves against the active backend host.
+  /// Stored URLs may carry a host from another environment.
+  ///
+  /// Returns null (never '') for a missing URL: converting null to '' made
+  /// every `!= null` guard pass and fed the empty string to Image.network,
+  /// which throws "No host specified".
+  static String? formatMediaUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return null;
+    final trimmed = url.trim();
+
+    const staleHosts = ['localhost:3000', '10.0.2.2:3000', '127.0.0.1:3000'];
+
+    if (staleHosts.any(trimmed.contains)) {
+      final path = Uri.parse(trimmed).path;
+      return '$baseUrl$path';
+    }
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) {
+      return '$baseUrl$trimmed';
+    }
+    return '$baseUrl/$trimmed';
   }
 }

@@ -15,12 +15,12 @@ class MockAuthService extends AuthService {
 
   @override
   UserInfo? get currentUser => UserInfo(
-        id: 'mock-user-id',
-        email: 'test@mock.com',
-        fullName: 'Mock User',
-        userType: 'ORGANIZER',
-        isVerified: true,
-      );
+    id: 'mock-user-id',
+    email: 'test@mock.com',
+    fullName: 'Mock User',
+    userType: 'ORGANIZER',
+    isVerified: true,
+  );
 
   @override
   bool get isAuthenticated => true;
@@ -39,7 +39,10 @@ class MockAttendanceService extends AttendanceService {
   };
 
   @override
-  Future<Map<String, dynamic>> verifyScannedPass(String token, String passToken) async {
+  Future<Map<String, dynamic>> verifyScannedPass(
+    String token,
+    String passToken,
+  ) async {
     verifyScannedPassCalled = true;
     lastPassedToken = passToken;
     return resultToReturn;
@@ -54,66 +57,74 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('flutter.baseflow.com/permissions/methods'),
-      null,
-    );
+          const MethodChannel('flutter.baseflow.com/permissions/methods'),
+          null,
+        );
   });
 
-  testWidgets('Renders Permission Denied Screen when Camera Permission is Denied', (WidgetTester tester) async {
-    // Mock permission status as Denied (0)
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('flutter.baseflow.com/permissions/methods'),
-      (MethodCall methodCall) async {
-        if (methodCall.method == 'checkPermissionStatus') {
-          return 0; // Denied
-        } else if (methodCall.method == 'requestPermissions') {
-          return {
-            1: 0, // Camera (1) is Denied (0)
-          };
-        }
-        return null;
-      },
-    );
+  testWidgets(
+    'Renders Permission Denied Screen when Camera Permission is Denied',
+    (WidgetTester tester) async {
+      // Mock permission status as Denied (0)
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('flutter.baseflow.com/permissions/methods'),
+            (MethodCall methodCall) async {
+              if (methodCall.method == 'checkPermissionStatus') {
+                return 0; // Denied
+              } else if (methodCall.method == 'requestPermissions') {
+                return {
+                  1: 0, // Camera (1) is Denied (0)
+                };
+              }
+              return null;
+            },
+          );
 
-    final mockAuth = MockAuthService();
-    final mockAttendance = MockAttendanceService();
+      final mockAuth = MockAuthService();
+      final mockAttendance = MockAttendanceService();
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthService>.value(value: mockAuth),
-          ChangeNotifierProvider<AttendanceService>.value(value: mockAttendance),
-        ],
-        child: const MaterialApp(
-          home: QrScannerScreen(),
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthService>.value(value: mockAuth),
+            ChangeNotifierProvider<AttendanceService>.value(
+              value: mockAttendance,
+            ),
+          ],
+          child: const MaterialApp(home: QrScannerScreen()),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Camera Access Required'), findsOneWidget);
-    expect(find.text('Please enable camera access to scan QR passes.'), findsOneWidget);
-    expect(find.text('Grant Access'), findsOneWidget);
-  });
+      expect(find.text('Camera Access Required'), findsOneWidget);
+      expect(
+        find.text('Please enable camera access to scan QR passes.'),
+        findsOneWidget,
+      );
+      expect(find.text('Grant Access'), findsOneWidget);
+    },
+  );
 
-  testWidgets('Renders Scanner View when Camera Permission is Granted', (WidgetTester tester) async {
+  testWidgets('Renders Scanner View when Camera Permission is Granted', (
+    WidgetTester tester,
+  ) async {
     // Mock permission status as Granted (1)
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('flutter.baseflow.com/permissions/methods'),
-      (MethodCall methodCall) async {
-        if (methodCall.method == 'checkPermissionStatus') {
-          return 1; // Granted
-        } else if (methodCall.method == 'requestPermissions') {
-          return {
-            1: 1, // Camera (1) is Granted (1)
-          };
-        }
-        return null;
-      },
-    );
+          const MethodChannel('flutter.baseflow.com/permissions/methods'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'checkPermissionStatus') {
+              return 1; // Granted
+            } else if (methodCall.method == 'requestPermissions') {
+              return {
+                1: 1, // Camera (1) is Granted (1)
+              };
+            }
+            return null;
+          },
+        );
 
     final mockAuth = MockAuthService();
     final mockAttendance = MockAttendanceService();
@@ -122,11 +133,11 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<AuthService>.value(value: mockAuth),
-          ChangeNotifierProvider<AttendanceService>.value(value: mockAttendance),
+          ChangeNotifierProvider<AttendanceService>.value(
+            value: mockAttendance,
+          ),
         ],
-        child: const MaterialApp(
-          home: QrScannerScreen(),
-        ),
+        child: const MaterialApp(home: QrScannerScreen()),
       ),
     );
 
@@ -137,56 +148,59 @@ void main() {
     expect(find.text('Verify Scanned Token'), findsOneWidget);
   });
 
-  testWidgets('Simulating manual token input successfully submits and opens Dialog', (WidgetTester tester) async {
-    // Mock permission status as Granted (1)
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('flutter.baseflow.com/permissions/methods'),
-      (MethodCall methodCall) async {
-        if (methodCall.method == 'checkPermissionStatus') {
-          return 1; // Granted
-        }
-        return null;
-      },
-    );
+  testWidgets(
+    'Simulating manual token input successfully submits and opens Dialog',
+    (WidgetTester tester) async {
+      // Mock permission status as Granted (1)
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('flutter.baseflow.com/permissions/methods'),
+            (MethodCall methodCall) async {
+              if (methodCall.method == 'checkPermissionStatus') {
+                return 1; // Granted
+              }
+              return null;
+            },
+          );
 
-    final mockAuth = MockAuthService();
-    final mockAttendance = MockAttendanceService();
+      final mockAuth = MockAuthService();
+      final mockAttendance = MockAttendanceService();
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<AuthService>.value(value: mockAuth),
-          ChangeNotifierProvider<AttendanceService>.value(value: mockAttendance),
-        ],
-        child: const MaterialApp(
-          home: QrScannerScreen(),
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthService>.value(value: mockAuth),
+            ChangeNotifierProvider<AttendanceService>.value(
+              value: mockAttendance,
+            ),
+          ],
+          child: const MaterialApp(home: QrScannerScreen()),
         ),
-      ),
-    );
+      );
 
-    await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
 
-    final textField = find.byType(TextField);
-    expect(textField, findsOneWidget);
+      final textField = find.byType(TextField);
+      expect(textField, findsOneWidget);
 
-    await tester.enterText(textField, 'mock-pass-token-string');
-    await tester.tap(find.text('Verify Scanned Token'));
-    await tester.pump(); // Starts loading state
+      await tester.enterText(textField, 'mock-pass-token-string');
+      await tester.tap(find.text('Verify Scanned Token'));
+      await tester.pump(); // Starts loading state
 
-    expect(mockAttendance.verifyScannedPassCalled, true);
-    expect(mockAttendance.lastPassedToken, 'mock-pass-token-string');
+      expect(mockAttendance.verifyScannedPassCalled, true);
+      expect(mockAttendance.lastPassedToken, 'mock-pass-token-string');
 
-    await tester.pumpAndSettle(); // Finishes async call and renders Dialog
+      await tester.pumpAndSettle(); // Finishes async call and renders Dialog
 
-    expect(find.text('Check-In Success'), findsOneWidget);
-    expect(find.text('Successfully checked in Mock User'), findsOneWidget);
-    expect(find.text('OK'), findsOneWidget);
+      expect(find.text('Check-In Success'), findsOneWidget);
+      expect(find.text('Successfully checked in Mock User'), findsOneWidget);
+      expect(find.text('OK'), findsOneWidget);
 
-    // Tap OK to close dialog
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
+      // Tap OK to close dialog
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Check-In Success'), findsNothing);
-  });
+      expect(find.text('Check-In Success'), findsNothing);
+    },
+  );
 }

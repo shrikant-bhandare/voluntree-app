@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'widgets/responsive.dart';
 import 'services/auth_service.dart';
 import 'services/event_service.dart';
 import 'services/chat_service.dart';
@@ -19,18 +21,19 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await Firebase.initializeApp();
-    final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    final fcmToken = await messaging.getToken();
-    debugPrint('[MAIN] Device FCM Token: $fcmToken');
-  } catch (e) {
-    debugPrint('[MAIN] Firebase initialization offline/skipped: $e');
+  // Firebase web needs its own generated options + a messaging service
+  // worker; neither is configured, so the web build relies on the in-app
+  // socket notifications instead of FCM push.
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp();
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      final fcmToken = await messaging.getToken();
+      debugPrint('[MAIN] Device FCM Token: $fcmToken');
+    } catch (e) {
+      debugPrint('[MAIN] Firebase initialization offline/skipped: $e');
+    }
   }
 
   runApp(
@@ -63,9 +66,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Voluntree',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       theme: ThemeData(
         brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF4FAFD), // Soft green-blue tint
+        scaffoldBackgroundColor: const Color(
+          0xFFF4FAFD,
+        ), // Soft green-blue tint
         primaryColor: const Color(0xFF012D1D), // Forest Green
         colorScheme: const ColorScheme.light(
           primary: Color(0xFF012D1D),
@@ -113,7 +119,9 @@ class AuthGate extends StatelessWidget {
     final authService = Provider.of<AuthService>(context);
 
     // If still loading session token validation, show loading screen
-    if (authService.isLoading && authService.token != null && authService.currentUser == null) {
+    if (authService.isLoading &&
+        authService.token != null &&
+        authService.currentUser == null) {
       return const Scaffold(
         backgroundColor: Color(0xFF0F172A),
         body: Center(

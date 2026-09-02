@@ -40,17 +40,21 @@ dependencies:
   socket_io_client: ^3.1.6
   qr_flutter: ^4.1.0
   google_fonts: ^8.1.0
-  mobile_scanner: ^5.1.1
+  mobile_scanner: ^7.4.0
   encrypt: ^5.0.3
   pointycastle: ^3.9.1
   firebase_core: ^4.11.0
   firebase_messaging: ^16.4.1
   image_picker: ^1.1.2
-  file_picker: ^8.1.4
+  file_picker: ^12.1.0
   geolocator: ^13.0.2
   permission_handler: ^11.3.1
   path_provider: ^2.1.5
   record: ^7.1.1
+  path: ^1.9.0
+  url_launcher: ^6.3.1
+  firebase_auth: ^6.5.7
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:

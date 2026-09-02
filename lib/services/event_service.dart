@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
+import 'api_helpers.dart';
 
 class EventModel {
   final String id;
@@ -66,27 +67,40 @@ class EventModel {
       title: json['title'] ?? '',
       description: json['description'] ?? '',
       category: json['category'] ?? '',
-      bannerUrl: json['bannerUrl'],
+      bannerUrl: AppConfig.formatMediaUrl(json['bannerUrl']),
       address: json['address'] ?? '',
-      latitude: json['latitude'] != null ? (json['latitude'] as num).toDouble() : null,
-      longitude: json['longitude'] != null ? (json['longitude'] as num).toDouble() : null,
+      latitude: json['latitude'] != null
+          ? (json['latitude'] as num).toDouble()
+          : null,
+      longitude: json['longitude'] != null
+          ? (json['longitude'] as num).toDouble()
+          : null,
       isOnline: json['isOnline'] ?? false,
-      startTime: DateTime.parse(json['startTime']),
-      endTime: DateTime.parse(json['endTime']),
+      startTime: parseServerDate(json['startTime']),
+      endTime: parseServerDate(json['endTime']),
       volunteersNeeded: json['volunteersNeeded'] ?? 0,
       minAge: json['minAge'] ?? 16,
       isPaid: json['isPaid'] ?? false,
       compensationDetails: json['compensationDetails'],
       status: json['status'] ?? 'ACTIVE',
-      distance: json['distance'] != null ? (json['distance'] as num).toDouble() : null,
-      organizerName: organizer['fullName'] ?? 'Verified Organizer',
+      distance: json['distance'] != null
+          ? (json['distance'] as num).toDouble()
+          : null,
+      // Recommendation rows carry a flat organizerName; never assert a
+      // verification the payload does not state.
+      organizerName:
+          organizer['fullName'] ?? json['organizerName'] ?? 'Organizer',
       organizerEmail: organizer['email'] ?? '',
       organizerId: json['organizerId'] ?? '',
       matchScore: json['matchScore'],
       approvedCount: json['approvedCount'] ?? 0,
       isOrganizerVerified: json['isOrganizerVerified'] ?? false,
-      openPositions: json['openPositions'] != null ? List<String>.from(json['openPositions']) : const [],
-      perks: json['perks'] != null ? List<String>.from(json['perks']) : const [],
+      openPositions: json['openPositions'] != null
+          ? List<String>.from(json['openPositions'])
+          : const [],
+      perks: json['perks'] != null
+          ? List<String>.from(json['perks'])
+          : const [],
     );
   }
 }
@@ -98,12 +112,14 @@ class EventService extends ChangeNotifier {
   List<dynamic> _organizerApplications = [];
   List<dynamic> _userApplications = [];
   Map<String, dynamic>? _organizerAnalytics;
+  List<EventModel> _myEvents = [];
   bool _isLoading = false;
 
   List<EventModel> get events => _events;
   List<dynamic> get organizerApplications => _organizerApplications;
   List<dynamic> get userApplications => _userApplications;
   Map<String, dynamic>? get organizerAnalytics => _organizerAnalytics;
+  List<EventModel> get myEvents => _myEvents;
   bool get isLoading => _isLoading;
 
   Future<void> fetchEvents({
@@ -129,15 +145,18 @@ class EventService extends ChangeNotifier {
         queryParams['latitude'] = latitude.toString();
         queryParams['longitude'] = longitude.toString();
         if (radius != null) {
-          queryParams['radius'] = radius.toString();
+          // The API validates radius as an integer number of kilometres.
+          queryParams['radius'] = radius.round().toString();
         }
       }
 
-      final uri = Uri.parse('$baseUrl/events').replace(queryParameters: queryParams);
+      final uri = Uri.parse(
+        '$baseUrl/events',
+      ).replace(queryParameters: queryParams);
       final response = await http.get(uri);
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final data = unwrapList(jsonDecode(response.body));
         _events = data.map((json) => EventModel.fromJson(json)).toList();
       } else {
         _events = [];
@@ -149,6 +168,50 @@ class EventService extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// GET /events/:id — the authoritative record, including approvedCount.
+  Future<EventModel?> fetchEventById(String id) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/events/$id'));
+      if (response.statusCode == 200) {
+        return EventModel.fromJson(jsonDecode(response.body));
+      }
+    } catch (e) {
+      debugPrint('fetchEventById error: $e');
+    }
+    return null;
+  }
+
+  /// GET /events/mine — the organizer's own events in every status. The
+  /// public list hides FULL/COMPLETED/CANCELLED drives, which made them
+  /// vanish from the organizer's dashboard the moment they filled up.
+  Future<void> fetchMyEvents(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/events/mine?limit=100'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final data = unwrapList(jsonDecode(response.body));
+        _myEvents = data.map((json) => EventModel.fromJson(json)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('fetchMyEvents error: $e');
+    }
+  }
+
+  /// Drop every cached list so the next account on this device does not see
+  /// the previous user's data.
+  void clear() {
+    _events = [];
+    _myEvents = [];
+    _organizerApplications = [];
+    _userApplications = [];
+    _organizerAnalytics = null;
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<Map<String, dynamic>> createEvent({
@@ -189,8 +252,10 @@ class EventService extends ChangeNotifier {
           'latitude': latitude,
           'longitude': longitude,
           'isOnline': isOnline,
-          'startTime': startTime.toIso8601String(),
-          'endTime': endTime.toIso8601String(),
+          // Explicit UTC: a local DateTime serialises without a zone suffix
+          // and the server would store the wall-clock time as UTC.
+          'startTime': startTime.toUtc().toIso8601String(),
+          'endTime': endTime.toUtc().toIso8601String(),
           'volunteersNeeded': volunteersNeeded,
           'minAge': minAge,
           'isPaid': isPaid,
@@ -208,7 +273,10 @@ class EventService extends ChangeNotifier {
       if (response.statusCode == 201) {
         return {'success': true, 'event': data};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Failed to create event'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to create event'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -248,7 +316,10 @@ class EventService extends ChangeNotifier {
         await fetchUserApplications(token);
         return {'success': true, 'application': data};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Failed to submit application'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to submit application'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -264,9 +335,7 @@ class EventService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/events/recommendations'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       _isLoading = false;
@@ -285,16 +354,17 @@ class EventService extends ChangeNotifier {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchEventApplications(String token, String eventId) async {
+  Future<List<Map<String, dynamic>>> fetchEventApplications(
+    String token,
+    String eventId,
+  ) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/applications/event/$eventId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final data = unwrapList(jsonDecode(response.body));
         return List<Map<String, dynamic>>.from(data);
       }
     } catch (e) {
@@ -303,7 +373,11 @@ class EventService extends ChangeNotifier {
     return [];
   }
 
-  Future<Map<String, dynamic>> updateApplicationStatus(String token, String applicationId, String status) async {
+  Future<Map<String, dynamic>> updateApplicationStatus(
+    String token,
+    String applicationId,
+    String status,
+  ) async {
     try {
       final response = await http.patch(
         Uri.parse('$baseUrl/applications/$applicationId/status'),
@@ -311,15 +385,16 @@ class EventService extends ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'status': status,
-        }),
+        body: jsonEncode({'status': status}),
       );
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
         return {'success': true, 'application': data};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Failed to update status'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to update status'),
+        };
       }
     } catch (e) {
       return {'success': false, 'message': 'Network connection failed: $e'};
@@ -330,12 +405,10 @@ class EventService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/applications/organizer'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
-        _organizerApplications = jsonDecode(response.body);
+        _organizerApplications = unwrapList(jsonDecode(response.body));
         notifyListeners();
       }
     } catch (e) {
@@ -347,12 +420,10 @@ class EventService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/applications/my'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
-        _userApplications = jsonDecode(response.body);
+        _userApplications = unwrapList(jsonDecode(response.body));
         notifyListeners();
       }
     } catch (e) {
@@ -394,18 +465,28 @@ class EventService extends ChangeNotifier {
           'title': title,
           'description': description,
           'category': category,
-          if (bannerUrl != null && bannerUrl.isNotEmpty) 'bannerUrl': bannerUrl,
+          // Explicit null so a removed banner is cleared server-side
+          // (an omitted key leaves the old value in place).
+          'bannerUrl': (bannerUrl != null && bannerUrl.isNotEmpty)
+              ? bannerUrl
+              : null,
           'address': address,
           'latitude': latitude,
           'longitude': longitude,
           'isOnline': isOnline,
-          'startTime': startTime.toIso8601String(),
-          'endTime': endTime.toIso8601String(),
+          // Explicit UTC: a local DateTime serialises without a zone suffix
+          // and the server would store the wall-clock time as UTC.
+          'startTime': startTime.toUtc().toIso8601String(),
+          'endTime': endTime.toUtc().toIso8601String(),
           'volunteersNeeded': volunteersNeeded,
           'minAge': minAge,
           'isPaid': isPaid,
-          if (isPaid && compensationDetails != null && compensationDetails.isNotEmpty)
-            'compensationDetails': compensationDetails,
+          'compensationDetails':
+              (isPaid &&
+                  compensationDetails != null &&
+                  compensationDetails.isNotEmpty)
+              ? compensationDetails
+              : null,
           'openPositions': openPositions,
           'perks': perks,
         }),
@@ -418,7 +499,10 @@ class EventService extends ChangeNotifier {
       if (response.statusCode == 200) {
         return {'success': true, 'event': data};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Failed to update event'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to update event'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -434,9 +518,7 @@ class EventService extends ChangeNotifier {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl/events/$eventId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       _isLoading = false;
@@ -446,7 +528,10 @@ class EventService extends ChangeNotifier {
         return {'success': true};
       } else {
         final data = jsonDecode(response.body);
-        return {'success': false, 'message': data['message'] ?? 'Failed to delete event'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to delete event'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -462,15 +547,15 @@ class EventService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/events/organizer/analytics'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
         _organizerAnalytics = jsonDecode(response.body);
       } else {
-        debugPrint('[EVENT SERVICE] Failed to fetch analytics: ${response.body}');
+        debugPrint(
+          '[EVENT SERVICE] Failed to fetch analytics: ${response.body}',
+        );
       }
     } catch (e) {
       debugPrint('[EVENT SERVICE] Error fetching analytics: $e');
@@ -480,17 +565,20 @@ class EventService extends ChangeNotifier {
     }
   }
 
-  Future<String?> uploadEventImage(String token, List<int> bytes, String filename) async {
+  Future<String?> uploadEventImage(
+    String token,
+    List<int> bytes,
+    String filename,
+  ) async {
     try {
-      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/events/upload'));
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/events/upload'),
+      );
       request.headers['Authorization'] = 'Bearer $token';
-      
+
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: filename,
-        ),
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
       );
 
       final streamedResponse = await request.send();

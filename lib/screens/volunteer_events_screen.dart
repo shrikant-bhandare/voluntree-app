@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../services/attendance_service.dart';
+import '../widgets/responsive.dart';
 import 'event_detail_screen.dart';
 import 'qr_pass_screen.dart';
 
@@ -14,7 +15,8 @@ class VolunteerEventsScreen extends StatefulWidget {
   State<VolunteerEventsScreen> createState() => _VolunteerEventsScreenState();
 }
 
-class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with SingleTickerProviderStateMixin {
+class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -35,8 +37,14 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
   void _refreshData() {
     final auth = Provider.of<AuthService>(context, listen: false);
     if (auth.token != null) {
-      Provider.of<EventService>(context, listen: false).fetchUserApplications(auth.token!);
-      Provider.of<AttendanceService>(context, listen: false).fetchHistory(auth.token!);
+      Provider.of<EventService>(
+        context,
+        listen: false,
+      ).fetchUserApplications(auth.token!);
+      Provider.of<AttendanceService>(
+        context,
+        listen: false,
+      ).fetchHistory(auth.token!);
     }
   }
 
@@ -48,8 +56,12 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
 
     // Filter applications
     final applications = eventService.userApplications;
-    final upcomingApps = applications.where((app) => app['status'] == 'APPROVED').toList();
-    final appliedApps = applications.where((app) => app['status'] != 'APPROVED').toList();
+    final upcomingApps = applications
+        .where((app) => app['status'] == 'APPROVED')
+        .toList();
+    final appliedApps = applications
+        .where((app) => app['status'] != 'APPROVED')
+        .toList();
     final completedHistory = attService.history;
 
     return Scaffold(
@@ -85,7 +97,10 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
           unselectedLabelColor: const Color(0xFF717973),
           indicatorColor: theme.colorScheme.primary,
           indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
           tabs: const [
             Tab(text: 'Upcoming'),
             Tab(text: 'Applied'),
@@ -93,16 +108,19 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // 1. Upcoming approved drives tab
-          _buildUpcomingTab(upcomingApps, theme),
-          // 2. Applied drives tab
-          _buildAppliedTab(appliedApps, theme),
-          // 3. Completed drives tab
-          _buildCompletedTab(completedHistory, theme),
-        ],
+      body: ResponsiveCenter(
+        maxWidth: 900,
+        child: TabBarView(
+          controller: _tabController,
+          children: [
+            // 1. Upcoming approved drives tab
+            _buildUpcomingTab(upcomingApps, theme),
+            // 2. Applied drives tab
+            _buildAppliedTab(appliedApps, theme),
+            // 3. Completed drives tab
+            _buildCompletedTab(completedHistory, theme),
+          ],
+        ),
       ),
     );
   }
@@ -128,13 +146,17 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
         final address = event['address'] ?? 'Online';
         final category = event['category'] ?? 'General';
         final banner = event['bannerUrl'];
-        final startTimeStr = event['startTime'] != null 
-            ? DateTime.parse(event['startTime']).toLocal().toString().substring(0, 16)
+        final startTimeStr = event['startTime'] != null
+            ? DateTime.parse(
+                event['startTime'],
+              ).toLocal().toString().substring(0, 16)
             : 'Unknown';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           elevation: 2,
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -150,20 +172,28 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                     height: 110,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(color: const Color(0xFF0E6C4A), height: 110),
+                    errorBuilder: (context, error, stackTrace) =>
+                        Container(color: const Color(0xFF0E6C4A), height: 110),
                   ),
                   Positioned(
                     top: 12,
                     left: 12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         category,
-                        style: TextStyle(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: theme.colorScheme.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -171,14 +201,21 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                     top: 12,
                     right: 12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF0E6C4A),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Text(
                         'APPROVED',
-                        style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -191,27 +228,48 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF012D1D)),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF012D1D),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                        const Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(width: 6),
-                        Text(startTimeStr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text(
+                          startTimeStr,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
+                        const Icon(
+                          Icons.location_on_outlined,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             address,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
@@ -224,12 +282,19 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                             onPressed: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (context) => EventDetailScreen(eventId: eventId)),
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      EventDetailScreen(eventId: eventId),
+                                ),
                               );
                             },
                             style: OutlinedButton.styleFrom(
-                              side: BorderSide(color: theme.colorScheme.primary),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                              side: BorderSide(
+                                color: theme.colorScheme.primary,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
                             ),
                             child: const Text('Event Details'),
                           ),
@@ -241,14 +306,17 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => QrPassScreen(applicationId: app['id']),
+                                  builder: (context) =>
+                                      QrPassScreen(applicationId: app['id']),
                                 ),
                               );
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF012D1D),
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
                             ),
                             icon: const Icon(Icons.qr_code_2, size: 16),
                             label: const Text('QR Entry Pass'),
@@ -286,8 +354,13 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
         final title = event['title'] ?? 'Drive Title';
         final category = event['category'] ?? 'General';
         final status = app['status'] ?? 'PENDING';
-        final startTimeStr = event['startTime'] != null 
-            ? DateTime.parse(event['startTime']).toLocal().toString().substring(0, 16)
+        // The application's own timestamp — this row used to print the
+        // event's start time as "Applied on".
+        final appliedOnStr = app['createdAt'] != null
+            ? (DateTime.tryParse(
+                    app['createdAt'].toString(),
+                  )?.toLocal().toString().substring(0, 16) ??
+                  'Unknown')
             : 'Unknown';
 
         Color statusColor = const Color(0xFFEAB308); // Yellow
@@ -301,12 +374,16 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: InkWell(
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => EventDetailScreen(eventId: eventId)),
+                MaterialPageRoute(
+                  builder: (context) => EventDetailScreen(eventId: eventId),
+                ),
               );
             },
             child: Padding(
@@ -320,14 +397,21 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: theme.colorScheme.surfaceContainer,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
                                 category,
-                                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ),
                           ],
@@ -337,26 +421,40 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                           title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF012D1D)),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF012D1D),
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Applied on: $startTimeStr',
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          'Applied on: $appliedOnStr',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       status,
-                      style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -385,14 +483,16 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
         final item = history[index];
         final eventTitle = item.eventTitle;
         final checkIn = item.checkIn.toLocal().toString().substring(0, 16);
-        final checkOut = item.checkOut != null 
+        final checkOut = item.checkOut != null
             ? item.checkOut!.toLocal().toString().substring(11, 16)
             : '--:--';
         final hours = item.hoursLogged;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -403,16 +503,26 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                     children: [
                       Text(
                         eventTitle,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF012D1D)),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF012D1D),
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         'Check In: $checkIn | Check Out: $checkOut',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF0E6C4A).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(20),
@@ -420,11 +530,19 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.check, size: 10, color: Color(0xFF0E6C4A)),
+                            Icon(
+                              Icons.check,
+                              size: 10,
+                              color: Color(0xFF0E6C4A),
+                            ),
                             SizedBox(width: 4),
                             Text(
                               'Verified Hours',
-                              style: TextStyle(color: Color(0xFF0E6C4A), fontSize: 9, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Color(0xFF0E6C4A),
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),
@@ -438,9 +556,16 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
                   children: [
                     Text(
                       '${hours.toStringAsFixed(1)}',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0E6C4A)),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0E6C4A),
+                      ),
                     ),
-                    const Text('Hours Logged', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                    const Text(
+                      'Hours Logged',
+                      style: TextStyle(fontSize: 8, color: Colors.grey),
+                    ),
                   ],
                 ),
               ],
@@ -462,11 +587,19 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen> with Sing
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 64, color: const Color(0xFF717973).withOpacity(0.3)),
+            Icon(
+              icon,
+              size: 64,
+              color: const Color(0xFF717973).withOpacity(0.3),
+            ),
             const SizedBox(height: 16),
             Text(
               title,
-              style: const TextStyle(color: Color(0xFF012D1D), fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Color(0xFF012D1D),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             Text(

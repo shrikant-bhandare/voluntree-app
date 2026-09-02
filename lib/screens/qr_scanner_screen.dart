@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -26,6 +27,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 
   Future<void> _checkCameraPermission() async {
+    if (kIsWeb) {
+      // The browser prompts for camera access itself when the scanner
+      // starts; permission_handler has no meaningful web implementation.
+      setState(() {
+        _cameraPermissionStatus = PermissionStatus.granted;
+      });
+      return;
+    }
+
     final status = await Permission.camera.status;
     if (mounted) {
       setState(() {
@@ -54,7 +64,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     if (tokenValue.trim().isEmpty) return;
 
     final authService = Provider.of<AuthService>(context, listen: false);
-    final attendanceService = Provider.of<AttendanceService>(context, listen: false);
+    final attendanceService = Provider.of<AttendanceService>(
+      context,
+      listen: false,
+    );
 
     if (authService.token == null) return;
 
@@ -75,7 +88,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       if (result['success']) {
         final scanType = result['type']; // CHECK_IN or CHECK_OUT
         final message = result['message'];
-        final timeStr = result['time'] != null ? DateTime.parse(result['time']).toLocal().toString().split('.')[0] : '';
+        final timeStr = result['time'] != null
+            ? DateTime.parse(result['time']).toLocal().toString().split('.')[0]
+            : '';
         final hours = result['hoursLogged'];
         final points = result['pointsAwarded'];
 
@@ -91,13 +106,23 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               title: Row(
                 children: [
                   Icon(
-                    scanType == 'CHECK_IN' ? Icons.check_circle : Icons.exit_to_app,
-                    color: scanType == 'CHECK_IN' ? const Color(0xFF10B981) : const Color(0xFFEC4899),
+                    scanType == 'CHECK_IN'
+                        ? Icons.check_circle
+                        : Icons.exit_to_app,
+                    color: scanType == 'CHECK_IN'
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFEC4899),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    scanType == 'CHECK_IN' ? 'Check-In Success' : 'Check-Out Success',
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    scanType == 'CHECK_IN'
+                        ? 'Check-In Success'
+                        : 'Check-Out Success',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -107,24 +132,39 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 children: [
                   Text(
                     message,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'Time: $timeStr',
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                    style: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 12,
+                    ),
                   ),
                   if (scanType == 'CHECK_OUT') ...[
                     const SizedBox(height: 8),
                     Text(
                       'Hours Logged: $hours hrs',
-                      style: const TextStyle(color: Color(0xFF10B981), fontSize: 13, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       'Reputation Points Emailed: +$points pts',
-                      style: const TextStyle(color: Color(0xFFEAB308), fontSize: 13, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Color(0xFFEAB308),
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ]
+                  ],
                 ],
               ),
               actions: [
@@ -137,7 +177,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                       _isProcessingCode = false;
                     });
                   },
-                  child: const Text('OK', style: TextStyle(color: Color(0xFF6366F1), fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      color: Color(0xFF6366F1),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             );
@@ -173,7 +219,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text('Attendance Scanner', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Attendance Scanner',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -198,10 +247,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                       if (_cameraPermissionStatus == null)
                         const Center(
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFF6366F1),
+                            ),
                           ),
                         )
-                      else if (_cameraPermissionStatus == PermissionStatus.granted)
+                      else if (_cameraPermissionStatus ==
+                          PermissionStatus.granted)
                         MobileScanner(
                           controller: _scannerController,
                           onDetect: (capture) {
@@ -217,16 +269,23 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                               }
                             }
                           },
-                          errorBuilder: (context, error, child) {
+                          errorBuilder: (context, error) {
                             return Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 40),
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: Colors.redAccent,
+                                    size: 40,
+                                  ),
                                   const SizedBox(height: 8),
                                   Text(
                                     'Camera Error: ${error.errorCode}',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -240,23 +299,35 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.camera_alt_outlined, color: Color(0xFF94A3B8), size: 44),
+                                const Icon(
+                                  Icons.camera_alt_outlined,
+                                  color: Color(0xFF94A3B8),
+                                  size: 44,
+                                ),
                                 const SizedBox(height: 12),
                                 const Text(
                                   'Camera Access Required',
-                                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 6),
                                 const Text(
                                   'Please enable camera access to scan QR passes.',
-                                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 10,
+                                  ),
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 14),
                                 ElevatedButton(
                                   onPressed: () async {
-                                    if (_cameraPermissionStatus == PermissionStatus.permanentlyDenied) {
+                                    if (_cameraPermissionStatus ==
+                                        PermissionStatus.permanentlyDenied) {
                                       await openAppSettings();
                                     } else {
                                       _checkCameraPermission();
@@ -265,15 +336,24 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF6366F1),
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 6,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
                                     elevation: 0,
                                   ),
                                   child: Text(
-                                    _cameraPermissionStatus == PermissionStatus.permanentlyDenied
+                                    _cameraPermissionStatus ==
+                                            PermissionStatus.permanentlyDenied
                                         ? 'Open Settings'
                                         : 'Grant Access',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -293,7 +373,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                               BoxShadow(
                                 color: const Color(0xFFEC4899).withOpacity(0.6),
                                 blurRadius: 8,
-                              )
+                              ),
                             ],
                           ),
                         ),
@@ -301,83 +381,107 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                       Positioned(
                         bottom: 20,
                         child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black54,
                             borderRadius: BorderRadius.all(Radius.circular(12)),
                           ),
                           child: Text(
                             'Align QR Pass within the frame',
-                            style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 32),
 
-              // Manual token input panel
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Development Verification Panel',
-                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Paste the signed pass token below to simulate scanning.',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _tokenController,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        hintText: 'Paste token (e.g. app-id|volunteer-id|...)',
-                        hintStyle: const TextStyle(color: Color(0xFF64748B)),
-                        filled: true,
-                        fillColor: const Color(0xFF0F172A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide.none,
+              // Manual token input panel — debug builds only; it was
+              // shipping in release UI.
+              if (kDebugMode)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Development Verification Panel',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _isVerifying
-                          ? null
-                          : () => _submitToken(_tokenController.text),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6366F1),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Paste the signed pass token below to simulate scanning.',
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 11,
+                        ),
                       ),
-                      child: _isVerifying
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text('Verify Scanned Token'),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _tokenController,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText:
+                              'Paste token (e.g. app-id|volunteer-id|...)',
+                          hintStyle: const TextStyle(color: Color(0xFF64748B)),
+                          filled: true,
+                          fillColor: const Color(0xFF0F172A),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _isVerifying
+                            ? null
+                            : () => _submitToken(_tokenController.text),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: _isVerifying
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Text('Verify Scanned Token'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),

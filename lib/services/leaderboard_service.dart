@@ -49,7 +49,9 @@ class LeaderboardService extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        _topVolunteers = data.map((json) => LeaderboardUser.fromJson(json)).toList();
+        _topVolunteers = data
+            .map((json) => LeaderboardUser.fromJson(json))
+            .toList();
       } else {
         _topVolunteers = [];
       }

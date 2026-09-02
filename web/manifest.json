@@ -1,12 +1,12 @@
 {
-    "name": "volunteer_mobile_app",
-    "short_name": "volunteer_mobile_app",
+    "name": "Voluntree",
+    "short_name": "Voluntree",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#F4FAFD",
+    "theme_color": "#012D1D",
+    "description": "Discover volunteer events, connect with NGOs, and track your community impact.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

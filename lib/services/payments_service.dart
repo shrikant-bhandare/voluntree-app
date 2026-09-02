@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
+import 'api_helpers.dart';
 
 class PaymentRecord {
   final String id;
@@ -33,7 +34,7 @@ class PaymentRecord {
       status: json['status'] ?? '',
       txRef: json['txRef'] ?? '',
       eventTitle: json['event']?['title'],
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: parseServerDate(json['createdAt']),
     );
   }
 }
@@ -47,7 +48,11 @@ class PaymentsService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   List<PaymentRecord> get history => _history;
 
-  Future<Map<String, dynamic>> createDonation(String token, double amount, {String? eventId}) async {
+  Future<Map<String, dynamic>> createDonation(
+    String token,
+    double amount, {
+    String? eventId,
+  }) async {
     _isLoading = true;
     notifyListeners();
 
@@ -71,7 +76,10 @@ class PaymentsService extends ChangeNotifier {
       if (response.statusCode == 201) {
         return {'success': true, ...data};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Donation failed'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Donation failed'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -80,7 +88,10 @@ class PaymentsService extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> createSubscription(String token, String plan) async {
+  Future<Map<String, dynamic>> createSubscription(
+    String token,
+    String plan,
+  ) async {
     _isLoading = true;
     notifyListeners();
 
@@ -101,7 +112,10 @@ class PaymentsService extends ChangeNotifier {
       if (response.statusCode == 201) {
         return {'success': true, ...data};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Subscription failed'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Subscription failed'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -110,16 +124,17 @@ class PaymentsService extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> promoteEvent(String token, String eventId) async {
+  Future<Map<String, dynamic>> promoteEvent(
+    String token,
+    String eventId,
+  ) async {
     _isLoading = true;
     notifyListeners();
 
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/payments/promote/$eventId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       final data = jsonDecode(response.body);
@@ -129,7 +144,10 @@ class PaymentsService extends ChangeNotifier {
       if (response.statusCode == 201) {
         return {'success': true, ...data};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Promotion failed'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Promotion failed'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -138,27 +156,12 @@ class PaymentsService extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> verifyTransaction(String token, String txRef, String status) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/payments/verify'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'txRef': txRef, 'status': status}),
-      );
-
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 201) {
-        await fetchHistory(token);
-        return {'success': true, ...data};
-      } else {
-        return {'success': false, 'message': data['message'] ?? 'Verification failed'};
-      }
-    } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
-    }
+  /// Settlement is webhook-only on the server (the old /payments/verify
+  /// endpoint that let a client mark its own payment successful is gone).
+  void clear() {
+    _history = [];
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<void> fetchHistory(String token) async {
@@ -172,7 +175,7 @@ class PaymentsService extends ChangeNotifier {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final data = unwrapList(jsonDecode(response.body));
         _history = data.map((json) => PaymentRecord.fromJson(json)).toList();
       } else {
         _history = [];

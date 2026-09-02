@@ -12,7 +12,9 @@ import 'package:volunteer_mobile_app/services/report_service.dart';
 import 'package:volunteer_mobile_app/services/payments_service.dart';
 
 void main() {
-  testWidgets('App starts and displays Login screen', (WidgetTester tester) async {
+  testWidgets('App starts and displays Login screen', (
+    WidgetTester tester,
+  ) async {
     // Build our app wrapped with MultiProvider and trigger a frame.
     await tester.pumpWidget(
       MultiProvider(

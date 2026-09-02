@@ -65,7 +65,8 @@ class _InAppNotificationWidget extends StatefulWidget {
   });
 
   @override
-  State<_InAppNotificationWidget> createState() => _InAppNotificationWidgetState();
+  State<_InAppNotificationWidget> createState() =>
+      _InAppNotificationWidgetState();
 }
 
 class _InAppNotificationWidgetState extends State<_InAppNotificationWidget>
@@ -81,9 +82,10 @@ class _InAppNotificationWidgetState extends State<_InAppNotificationWidget>
       duration: const Duration(milliseconds: 350),
     );
 
-    _slideAnimation = Tween<double>(begin: -1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-    );
+    _slideAnimation = Tween<double>(
+      begin: -1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     _controller.forward();
   }
@@ -123,7 +125,10 @@ class _InAppNotificationWidgetState extends State<_InAppNotificationWidget>
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B).withOpacity(0.9),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF334155), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFF334155),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.4),
@@ -137,7 +142,11 @@ class _InAppNotificationWidgetState extends State<_InAppNotificationWidget>
                     CircleAvatar(
                       backgroundColor: widget.iconColor.withOpacity(0.15),
                       radius: 20,
-                      child: Icon(widget.icon, color: widget.iconColor, size: 22),
+                      child: Icon(
+                        widget.icon,
+                        color: widget.iconColor,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -167,7 +176,11 @@ class _InAppNotificationWidgetState extends State<_InAppNotificationWidget>
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white54,
+                        size: 18,
+                      ),
                       onPressed: _handleDismiss,
                     ),
                   ],

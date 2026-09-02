@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import '../services/event_service.dart';
 import '../services/auth_service.dart';
@@ -17,14 +19,16 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
   String _selectedCategory = 'All';
   bool _nearbyEnabled = false;
   double _radius = 10.0; // km
+  Timer? _searchDebounce;
 
   bool _showRecommendations = false;
   List<EventModel> _recommendations = [];
   bool _loadingRecommendations = false;
 
-  // Mock user location coordinates (e.g., local city center coordinates)
-  final double _mockUserLat = 12.9716; // Bengaluru center
-  final double _mockUserLon = 77.5946;
+  // Device position, resolved when the distance filter is switched on.
+  double? _userLat;
+  double? _userLon;
+  bool _locating = false;
 
   final List<String> _categories = [
     'All',
@@ -67,19 +71,73 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   void _refresh() {
     final eventService = Provider.of<EventService>(context, listen: false);
+    final useGeo = _nearbyEnabled && _userLat != null && _userLon != null;
     eventService.fetchEvents(
       category: _selectedCategory,
       search: _searchController.text.trim(),
-      latitude: _nearbyEnabled ? _mockUserLat : null,
-      longitude: _nearbyEnabled ? _mockUserLon : null,
-      radius: _nearbyEnabled ? _radius : null,
+      latitude: useGeo ? _userLat : null,
+      longitude: useGeo ? _userLon : null,
+      radius: useGeo ? _radius : null,
     );
+  }
+
+  /// Search fired per keystroke; wait for a pause so three letters do not
+  /// become three requests racing to overwrite each other.
+  void _scheduleRefresh() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), _refresh);
+  }
+
+  /// The old filter used hard-coded Bengaluru coordinates for everyone.
+  Future<void> _setNearby(bool enabled) async {
+    if (!enabled) {
+      setState(() => _nearbyEnabled = false);
+      _refresh();
+      return;
+    }
+    setState(() => _locating = true);
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw Exception('Location permission denied');
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _userLat = pos.latitude;
+        _userLon = pos.longitude;
+        _nearbyEnabled = true;
+      });
+      _refresh();
+    } catch (e) {
+      debugPrint('[DISCOVER] location unavailable: $e');
+      if (!mounted) return;
+      setState(() => _nearbyEnabled = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not get your location. Check location permissions and try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
   }
 
   @override
@@ -117,7 +175,9 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             decoration: const BoxDecoration(
               color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xFFE8EFF1), width: 1.5)),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE8EFF1), width: 1.5),
+              ),
             ),
             child: Column(
               children: [
@@ -125,21 +185,30 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                 TextField(
                   controller: _searchController,
                   style: TextStyle(color: theme.colorScheme.onSurface),
-                  onChanged: (_) => _refresh(),
+                  onChanged: (_) => _scheduleRefresh(),
                   decoration: InputDecoration(
                     hintText: 'Search event titles or keywords...',
                     hintStyle: const TextStyle(color: Color(0xFF717973)),
-                    prefixIcon: Icon(Icons.search, color: theme.colorScheme.secondary),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      color: theme.colorScheme.secondary,
+                    ),
                     filled: true,
                     fillColor: const Color(0xFFF4FAFD),
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE8EFF1), width: 1),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFE8EFF1),
+                        width: 1,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: theme.colorScheme.primary, width: 2),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.primary,
+                        width: 2,
+                      ),
                     ),
                   ),
                 ),
@@ -162,14 +231,18 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                           selectedColor: theme.colorScheme.primary,
                           backgroundColor: const Color(0xFFF4FAFD),
                           labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : const Color(0xFF717973),
+                            color: isSelected
+                                ? Colors.white
+                                : const Color(0xFF717973),
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                             side: BorderSide(
-                              color: isSelected ? theme.colorScheme.primary : const Color(0xFFE8EFF1),
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : const Color(0xFFE8EFF1),
                               width: 1,
                             ),
                           ),
@@ -196,7 +269,9 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: const BoxDecoration(
               color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xFFE8EFF1), width: 1.5)),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE8EFF1), width: 1.5),
+              ),
             ),
             child: Column(
               children: [
@@ -205,7 +280,11 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.location_on_outlined, color: theme.colorScheme.secondary, size: 20),
+                        Icon(
+                          Icons.location_on_outlined,
+                          color: theme.colorScheme.secondary,
+                          size: 20,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           'Filter by distance (GPS)',
@@ -220,12 +299,7 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                     Switch.adaptive(
                       value: _nearbyEnabled,
                       activeColor: theme.colorScheme.secondary,
-                      onChanged: (val) {
-                        setState(() {
-                          _nearbyEnabled = val;
-                        });
-                        _refresh();
-                      },
+                      onChanged: _locating ? null : (val) => _setNearby(val),
                     ),
                   ],
                 ),
@@ -234,13 +308,20 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                     children: [
                       Text(
                         'Radius: ${_radius.round()} km',
-                        style: const TextStyle(color: Color(0xFF717973), fontSize: 12, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Color(0xFF717973),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Expanded(
                         child: Slider(
                           value: _radius,
                           min: 2,
                           max: 50,
+                          // Whole kilometres: the API rejects a fractional
+                          // radius, and a free slider produced 27.34…
+                          divisions: 48,
                           activeColor: theme.colorScheme.secondary,
                           inactiveColor: const Color(0xFFE8EFF1),
                           onChanged: (val) {
@@ -253,7 +334,7 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                       ),
                     ],
                   ),
-                ]
+                ],
               ],
             ),
           ),
@@ -263,7 +344,9 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
             decoration: const BoxDecoration(
               color: Colors.white,
-              border: Border(bottom: BorderSide(color: Color(0xFFE8EFF1), width: 1.5)),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE8EFF1), width: 1.5),
+              ),
             ),
             child: Row(
               children: [
@@ -279,7 +362,9 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: !_showRecommendations ? theme.colorScheme.primary : Colors.transparent,
+                            color: !_showRecommendations
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
                             width: 2.5,
                           ),
                         ),
@@ -288,7 +373,9 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                       child: Text(
                         'Explore Feed',
                         style: TextStyle(
-                          color: !_showRecommendations ? theme.colorScheme.primary : const Color(0xFF717973),
+                          color: !_showRecommendations
+                              ? theme.colorScheme.primary
+                              : const Color(0xFF717973),
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -309,7 +396,9 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: _showRecommendations ? theme.colorScheme.primary : Colors.transparent,
+                            color: _showRecommendations
+                                ? theme.colorScheme.primary
+                                : Colors.transparent,
                             width: 2.5,
                           ),
                         ),
@@ -318,7 +407,9 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                       child: Text(
                         'AI Recommendations ⚡',
                         style: TextStyle(
-                          color: _showRecommendations ? theme.colorScheme.primary : const Color(0xFF717973),
+                          color: _showRecommendations
+                              ? theme.colorScheme.primary
+                              : const Color(0xFF717973),
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -334,81 +425,109 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
           Expanded(
             child: _showRecommendations
                 ? _loadingRecommendations
-                    ? Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.secondary),
-                        ),
-                      )
-                    : _recommendations.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.psychology_outlined, size: 64, color: Color(0xFF717973)),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No AI recommendations yet',
-                                  style: TextStyle(color: theme.colorScheme.primary, fontSize: 16, fontWeight: FontWeight.bold),
+                      ? Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              theme.colorScheme.secondary,
+                            ),
+                          ),
+                        )
+                      : _recommendations.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.psychology_outlined,
+                                size: 64,
+                                color: Color(0xFF717973),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No AI recommendations yet',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                const SizedBox(height: 6),
-                                const Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                                  child: Text(
-                                    'Define interests on your Profile screen to match custom campaigns.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Color(0xFF717973), fontSize: 12),
+                              ),
+                              const SizedBox(height: 6),
+                              const Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                ),
+                                child: Text(
+                                  'Define interests on your Profile screen to match custom campaigns.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Color(0xFF717973),
+                                    fontSize: 12,
                                   ),
                                 ),
-                              ],
-                            ),
-                          )
-                        : RefreshIndicator(
-                            onRefresh: () async => _loadRecommendations(),
-                            child: ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _recommendations.length,
-                              itemBuilder: (context, index) {
-                                final event = _recommendations[index];
-                                return _buildEventCard(event);
-                              },
-                            ),
-                          )
+                              ),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () async => _loadRecommendations(),
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _recommendations.length,
+                            itemBuilder: (context, index) {
+                              final event = _recommendations[index];
+                              return _buildEventCard(event);
+                            },
+                          ),
+                        )
                 : isLoading
-                    ? Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.secondary),
-                        ),
-                      )
-                : events.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.event_busy_outlined, size: 64, color: Color(0xFF717973)),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No matching events found',
-                              style: TextStyle(color: theme.colorScheme.primary, fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Try modifying your filters or search keywords.',
-                              style: TextStyle(color: Color(0xFF717973), fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () async => _refresh(),
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: events.length,
-                          itemBuilder: (context, index) {
-                            final event = events[index];
-                            return _buildEventCard(event);
-                          },
-                        ),
+                ? Center(
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.secondary,
                       ),
+                    ),
+                  )
+                : events.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.event_busy_outlined,
+                          size: 64,
+                          color: Color(0xFF717973),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No matching events found',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Try modifying your filters or search keywords.',
+                          style: TextStyle(
+                            color: Color(0xFF717973),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: () async => _refresh(),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: events.length,
+                      itemBuilder: (context, index) {
+                        final event = events[index];
+                        return _buildEventCard(event);
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
@@ -417,8 +536,10 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
 
   Widget _buildEventCard(EventModel event) {
     final theme = Theme.of(context);
-    final dateStr = '${event.startTime.day}/${event.startTime.month}/${event.startTime.year}';
-    final timeStr = '${event.startTime.hour.toString().padLeft(2, '0')}:${event.startTime.minute.toString().padLeft(2, '0')}';
+    final dateStr =
+        '${event.startTime.day}/${event.startTime.month}/${event.startTime.year}';
+    final timeStr =
+        '${event.startTime.hour.toString().padLeft(2, '0')}:${event.startTime.minute.toString().padLeft(2, '0')}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -431,7 +552,7 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
             color: theme.colorScheme.primaryContainer.withOpacity(0.03),
             blurRadius: 16,
             offset: const Offset(0, 8),
-          )
+          ),
         ],
       ),
       child: ClipRRect(
@@ -470,7 +591,10 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: theme.colorScheme.secondaryContainer,
                               borderRadius: BorderRadius.circular(20),
@@ -486,14 +610,21 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                           ),
                           if (event.matchScore != null)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF0E6C4A),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
                                 '${event.matchScore}% MATCH ⚡',
-                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                         ],
@@ -502,8 +633,12 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                         event.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      )
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -516,23 +651,38 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.calendar_today_outlined, size: 16, color: Color(0xFF717973)),
+                        const Icon(
+                          Icons.calendar_today_outlined,
+                          size: 16,
+                          color: Color(0xFF717973),
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           '$dateStr at $timeStr',
-                          style: const TextStyle(color: Color(0xFF717973), fontSize: 13, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            color: Color(0xFF717973),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         const Spacer(),
                         if (event.isPaid)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFD8704).withOpacity(0.15),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
                               'SPONSORED',
-                              style: TextStyle(color: Color(0xFFFD8704), fontSize: 9, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Color(0xFFFD8704),
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                       ],
@@ -540,20 +690,32 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined, size: 16, color: Color(0xFF717973)),
+                        const Icon(
+                          Icons.location_on_outlined,
+                          size: 16,
+                          color: Color(0xFF717973),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             event.address,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Color(0xFF717973), fontSize: 13, fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                              color: Color(0xFF717973),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                         if (event.distance != null)
                           Text(
                             '${event.distance!.toStringAsFixed(1)} km away',
-                            style: TextStyle(color: theme.colorScheme.secondary, fontSize: 12, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: theme.colorScheme.secondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                       ],
                     ),

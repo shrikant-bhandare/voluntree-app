@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,10 +8,13 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io' show File;
+import '../config.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../services/posts_service.dart';
+import '../widgets/responsive.dart';
 
 class EventFeedScreen extends StatefulWidget {
   const EventFeedScreen({super.key});
@@ -27,7 +32,10 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
     if (_isInit) {
       final auth = Provider.of<AuthService>(context, listen: false);
       if (auth.token != null) {
-        Provider.of<PostsService>(context, listen: false).fetchPosts(auth.token!);
+        Provider.of<PostsService>(
+          context,
+          listen: false,
+        ).fetchPosts(auth.token!);
         Provider.of<EventService>(context, listen: false).fetchEvents();
       }
       _isInit = false;
@@ -37,7 +45,10 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
   Future<void> _refreshFeed() async {
     final auth = Provider.of<AuthService>(context, listen: false);
     if (auth.token != null) {
-      await Provider.of<PostsService>(context, listen: false).fetchPosts(auth.token!);
+      await Provider.of<PostsService>(
+        context,
+        listen: false,
+      ).fetchPosts(auth.token!);
     }
   }
 
@@ -59,7 +70,8 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
     final postsService = Provider.of<PostsService>(context);
     final auth = Provider.of<AuthService>(context, listen: false);
     final user = auth.currentUser;
-    final isOrganizer = user?.userType == 'ORGANIZER' || user?.userType == 'ADMIN';
+    final isOrganizer =
+        user?.userType == 'ORGANIZER' || user?.userType == 'ADMIN';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -67,57 +79,77 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
         title: Text(
           'Community Moments',
           style: GoogleFonts.plusJakartaSans(
-            textStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontSize: 18,
+            ),
           ),
         ),
         backgroundColor: theme.colorScheme.primary,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          if (isOrganizer)
+          // Posting requires an APPROVED verification (API returns 403).
+          if (isOrganizer && user?.isVerified == true)
             IconButton(
-              icon: const Icon(Icons.add_box_outlined, color: Colors.white, size: 26),
+              icon: const Icon(
+                Icons.add_box_outlined,
+                color: Colors.white,
+                size: 26,
+              ),
               onPressed: () => _showCreatePostSheet(context),
             ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshFeed,
-        color: theme.colorScheme.primary,
-        child: postsService.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : postsService.posts.isEmpty
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: [
-                      SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-                      const Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.photo_library_outlined, size: 64, color: Colors.grey),
-                            SizedBox(height: 16),
-                            Text(
-                              'No moments posted yet!',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey),
+      body: ResponsiveCenter(
+        maxWidth: 680,
+        child: RefreshIndicator(
+          onRefresh: _refreshFeed,
+          color: theme.colorScheme.primary,
+          child: postsService.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : postsService.posts.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+                    const Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.photo_library_outlined,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'No moments posted yet!',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.grey,
                             ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Organizers can post event photos to share moments.',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          ],
-                        ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Organizers can post event photos to share moments.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
                       ),
-                    ],
-                  )
-                : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: postsService.posts.length,
-                    itemBuilder: (ctx, index) {
-                      final post = postsService.posts[index];
-                      return PostCard(post: post);
-                    },
-                  ),
+                    ),
+                  ],
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: postsService.posts.length,
+                  itemBuilder: (ctx, index) {
+                    final post = postsService.posts[index];
+                    return PostCard(post: post);
+                  },
+                ),
+        ),
       ),
     );
   }
@@ -158,6 +190,12 @@ class _PostCardState extends State<PostCard> {
 
   Future<void> _downloadPhoto(String url, String filename) async {
     try {
+      if (kIsWeb) {
+        // No writable filesystem on web — open the image in a new tab and
+        // let the browser's own save/download UI take over.
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        return;
+      }
       final response = await http.get(Uri.parse(url));
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/$filename');
@@ -183,7 +221,9 @@ class _PostCardState extends State<PostCard> {
   }
 
   void _sharePhoto(String url) {
-    Clipboard.setData(ClipboardData(text: 'Check out this amazing volunteer moment: $url'));
+    Clipboard.setData(
+      ClipboardData(text: 'Check out this amazing volunteer moment: $url'),
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Moment link copied to clipboard!'),
@@ -215,7 +255,10 @@ class _PostCardState extends State<PostCard> {
         title: const Text('Delete Post'),
         content: const Text('Are you sure you want to delete this moment?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -225,10 +268,16 @@ class _PostCardState extends State<PostCard> {
     );
 
     if (confirm == true) {
-      final success = await postsService.deletePost(auth.token!, widget.post.id);
+      final success = await postsService.deletePost(
+        auth.token!,
+        widget.post.id,
+      );
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Post deleted successfully!'), backgroundColor: Color(0xFF0E6C4A)),
+          const SnackBar(
+            content: Text('Post deleted successfully!'),
+            backgroundColor: Color(0xFF0E6C4A),
+          ),
         );
       }
     }
@@ -239,8 +288,12 @@ class _PostCardState extends State<PostCard> {
     final theme = Theme.of(context);
     final auth = Provider.of<AuthService>(context, listen: false);
     final currentUser = auth.currentUser;
-    final isCreator = currentUser?.id == widget.post.organizerId || currentUser?.userType == 'ADMIN';
-    final initials = widget.post.organizerName.isNotEmpty ? widget.post.organizerName[0].toUpperCase() : 'O';
+    final isCreator =
+        currentUser?.id == widget.post.organizerId ||
+        currentUser?.userType == 'ADMIN';
+    final initials = widget.post.organizerName.isNotEmpty
+        ? widget.post.organizerName[0].toUpperCase()
+        : 'O';
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
@@ -260,14 +313,27 @@ class _PostCardState extends State<PostCard> {
         children: [
           // Header
           ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
             leading: CircleAvatar(
               backgroundColor: const Color(0xFFE8EFF1),
-              backgroundImage: widget.post.organizerAvatar != null && widget.post.organizerAvatar!.isNotEmpty
+              backgroundImage:
+                  widget.post.organizerAvatar != null &&
+                      widget.post.organizerAvatar!.isNotEmpty
                   ? NetworkImage(widget.post.organizerAvatar!)
                   : null,
-              child: widget.post.organizerAvatar == null || widget.post.organizerAvatar!.isEmpty
-                  ? Text(initials, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary))
+              child:
+                  widget.post.organizerAvatar == null ||
+                      widget.post.organizerAvatar!.isEmpty
+                  ? Text(
+                      initials,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    )
                   : null,
             ),
             title: Text(
@@ -276,7 +342,11 @@ class _PostCardState extends State<PostCard> {
             ),
             subtitle: Text(
               widget.post.eventTitle,
-              style: TextStyle(fontSize: 11, color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 11,
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             trailing: isCreator
                 ? IconButton(
@@ -338,17 +408,25 @@ class _PostCardState extends State<PostCard> {
               children: [
                 IconButton(
                   icon: Icon(
-                    widget.post.hasLiked ? Icons.favorite : Icons.favorite_border,
+                    widget.post.hasLiked
+                        ? Icons.favorite
+                        : Icons.favorite_border,
                     color: widget.post.hasLiked ? Colors.red : Colors.black87,
                   ),
                   onPressed: () {
                     if (auth.token != null) {
-                      Provider.of<PostsService>(context, listen: false).toggleLike(auth.token!, widget.post.id);
+                      Provider.of<PostsService>(
+                        context,
+                        listen: false,
+                      ).toggleLike(auth.token!, widget.post.id);
                     }
                   },
                 ),
                 IconButton(
-                  icon: const Icon(Icons.mode_comment_outlined, color: Colors.black87),
+                  icon: const Icon(
+                    Icons.mode_comment_outlined,
+                    color: Colors.black87,
+                  ),
                   onPressed: () => _showCommentsSheet(context),
                 ),
                 IconButton(
@@ -357,17 +435,30 @@ class _PostCardState extends State<PostCard> {
                 ),
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.download_for_offline_outlined, color: Colors.black87),
-                  onPressed: () => _downloadPhoto(widget.post.imageUrl, 'moments_${widget.post.id}.jpg'),
+                  icon: const Icon(
+                    Icons.download_for_offline_outlined,
+                    color: Colors.black87,
+                  ),
+                  onPressed: () => _downloadPhoto(
+                    widget.post.imageUrl,
+                    'moments_${widget.post.id}.jpg',
+                  ),
                 ),
                 IconButton(
                   icon: Icon(
-                    widget.post.hasSaved ? Icons.bookmark : Icons.bookmark_border,
-                    color: widget.post.hasSaved ? theme.colorScheme.primary : Colors.black87,
+                    widget.post.hasSaved
+                        ? Icons.bookmark
+                        : Icons.bookmark_border,
+                    color: widget.post.hasSaved
+                        ? theme.colorScheme.primary
+                        : Colors.black87,
                   ),
                   onPressed: () {
                     if (auth.token != null) {
-                      Provider.of<PostsService>(context, listen: false).toggleSave(auth.token!, widget.post.id);
+                      Provider.of<PostsService>(
+                        context,
+                        listen: false,
+                      ).toggleSave(auth.token!, widget.post.id);
                     }
                   },
                 ),
@@ -377,19 +468,29 @@ class _PostCardState extends State<PostCard> {
 
           // Likes & Caption
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 2.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '${widget.post.likeCount} likes',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 6),
-                if (widget.post.caption != null && widget.post.caption!.isNotEmpty) ...[
+                if (widget.post.caption != null &&
+                    widget.post.caption!.isNotEmpty) ...[
                   RichText(
                     text: TextSpan(
-                      style: const TextStyle(color: Colors.black87, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 13,
+                      ),
                       children: [
                         TextSpan(
                           text: '${widget.post.organizerName} ',
@@ -410,25 +511,37 @@ class _PostCardState extends State<PostCard> {
                       padding: const EdgeInsets.symmetric(vertical: 4.0),
                       child: Text(
                         'View all ${widget.post.commentCount} comments',
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ),
-                  ...widget.post.comments.take(2).map((comment) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2.0),
-                        child: RichText(
-                          text: TextSpan(
-                            style: const TextStyle(color: Colors.black87, fontSize: 12),
-                            children: [
-                              TextSpan(
-                                text: '${comment.userName} ',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                  ...widget.post.comments
+                      .take(2)
+                      .map(
+                        (comment) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                          child: RichText(
+                            text: TextSpan(
+                              style: const TextStyle(
+                                color: Colors.black87,
+                                fontSize: 12,
                               ),
-                              TextSpan(text: comment.content),
-                            ],
+                              children: [
+                                TextSpan(
+                                  text: '${comment.userName} ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                TextSpan(text: comment.content),
+                              ],
+                            ),
                           ),
                         ),
-                      )),
+                      ),
                 ],
                 const SizedBox(height: 8),
               ],
@@ -470,8 +583,12 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
       _isSubmitting = true;
     });
 
-    final comment = await postsService.addComment(auth.token!, widget.post.id, text);
-    
+    final comment = await postsService.addComment(
+      auth.token!,
+      widget.post.id,
+      text,
+    );
+
     if (mounted) {
       setState(() {
         _isSubmitting = false;
@@ -486,7 +603,9 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final postsService = Provider.of<PostsService>(context);
-    final postIndex = postsService.posts.indexWhere((p) => p.id == widget.post.id);
+    final postIndex = postsService.posts.indexWhere(
+      (p) => p.id == widget.post.id,
+    );
     final post = postIndex != -1 ? postsService.posts[postIndex] : widget.post;
 
     return Padding(
@@ -532,24 +651,43 @@ class _CommentsSheetWidgetState extends State<CommentsSheetWidget> {
                       itemCount: post.comments.length,
                       itemBuilder: (ctx, idx) {
                         final comment = post.comments[idx];
-                        final cInitials = comment.userName.isNotEmpty ? comment.userName[0].toUpperCase() : 'U';
+                        final cInitials = comment.userName.isNotEmpty
+                            ? comment.userName[0].toUpperCase()
+                            : 'U';
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundColor: const Color(0xFFE8EFF1),
-                            backgroundImage: comment.userAvatar != null && comment.userAvatar!.isNotEmpty
+                            backgroundImage:
+                                comment.userAvatar != null &&
+                                    comment.userAvatar!.isNotEmpty
                                 ? NetworkImage(comment.userAvatar!)
                                 : null,
-                            child: comment.userAvatar == null || comment.userAvatar!.isEmpty
-                                ? Text(cInitials, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary))
+                            child:
+                                comment.userAvatar == null ||
+                                    comment.userAvatar!.isEmpty
+                                ? Text(
+                                    cInitials,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  )
                                 : null,
                           ),
                           title: Text(
                             comment.userName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                           subtitle: Text(
                             comment.content,
-                            style: const TextStyle(color: Colors.black87, fontSize: 13),
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontSize: 13,
+                            ),
                           ),
                         );
                       },
@@ -615,6 +753,17 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
   bool _isPublishing = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final eventService = Provider.of<EventService>(context, listen: false);
+      if (eventService.events.isEmpty) {
+        eventService.fetchEvents();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _captionController.dispose();
     super.dispose();
@@ -622,9 +771,12 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
 
   Future<void> _pickAndUploadPhoto(ImageSource source) async {
     bool hasPermission = false;
-    
+
     try {
-      if (source == ImageSource.camera) {
+      if (kIsWeb) {
+        // Browsers gate camera/file access through their own prompts.
+        hasPermission = true;
+      } else if (source == ImageSource.camera) {
         final status = await Permission.camera.request();
         if (status.isGranted) {
           hasPermission = true;
@@ -632,14 +784,14 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
           await openAppSettings();
         }
       } else {
-        if (Platform.isIOS) {
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
           final status = await Permission.photos.request();
           if (status.isGranted || status.isLimited) {
             hasPermission = true;
           } else if (status.isPermanentlyDenied) {
             await openAppSettings();
           }
-        } else if (Platform.isAndroid) {
+        } else if (defaultTargetPlatform == TargetPlatform.android) {
           final status = await Permission.photos.request();
           if (status.isGranted) {
             hasPermission = true;
@@ -661,14 +813,20 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
 
     if (!hasPermission) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Permission denied.'), backgroundColor: Colors.redAccent),
+        const SnackBar(
+          content: Text('Permission denied.'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }
 
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: source, imageQuality: 85);
+      final XFile? image = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
       if (image == null) return;
 
       setState(() {
@@ -680,19 +838,35 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
       final eventService = Provider.of<EventService>(context, listen: false);
 
       if (auth.token != null) {
-        final url = await eventService.uploadEventImage(auth.token!, bytes, image.name);
+        final url = await eventService.uploadEventImage(
+          auth.token!,
+          bytes,
+          image.name,
+        );
         if (url != null) {
+          if (!mounted) return;
           setState(() {
-            _uploadedImageUrl = url;
+            _uploadedImageUrl = AppConfig.formatMediaUrl(url);
           });
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to upload photo. Please try again.'),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
         }
       }
     } catch (e) {
       debugPrint('[CREATE POST] Pick error: $e');
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
     }
   }
 
@@ -751,10 +925,17 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
     final theme = Theme.of(context);
     final auth = Provider.of<AuthService>(context, listen: false);
     final eventService = Provider.of<EventService>(context, listen: false);
-    
-    final organizerId = auth.currentUser?.id;
-    final organizerEvents = eventService.events
-        .where((e) => e.organizerId == organizerId)
+
+    final currentUser = auth.currentUser;
+    final isAdmin = currentUser?.userType == 'ADMIN';
+    final organizerId = currentUser?.id;
+    // The organizer's own list includes FULL/COMPLETED drives — the ones
+    // photos usually get posted for; the public list hides them.
+    final source = !isAdmin && eventService.myEvents.isNotEmpty
+        ? eventService.myEvents
+        : eventService.events;
+    final organizerEvents = source
+        .where((e) => isAdmin || e.organizerId == organizerId)
         .toList();
 
     return Padding(
@@ -772,7 +953,11 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
             const Text(
               'Share a Moment',
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF012D1D)),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: Color(0xFF012D1D),
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -793,8 +978,14 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
               decoration: InputDecoration(
                 filled: true,
                 fillColor: const Color(0xFFF4FAFD),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -834,21 +1025,31 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFFCBD5E1)),
                   image: _uploadedImageUrl != null
-                      ? DecorationImage(image: NetworkImage(_uploadedImageUrl!), fit: BoxFit.cover)
+                      ? DecorationImage(
+                          image: NetworkImage(_uploadedImageUrl!),
+                          fit: BoxFit.cover,
+                        )
                       : null,
                 ),
                 child: _uploadedImageUrl != null
                     ? null
                     : _isUploading
-                        ? const Center(child: CircularProgressIndicator())
-                        : const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.camera_alt_outlined, size: 48, color: Colors.grey),
-                              SizedBox(height: 8),
-                              Text('Tap to add photo', style: TextStyle(color: Colors.grey)),
-                            ],
+                    ? const Center(child: CircularProgressIndicator())
+                    : const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.camera_alt_outlined,
+                            size: 48,
+                            color: Colors.grey,
                           ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Tap to add photo',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
               ),
             ),
             const SizedBox(height: 16),
@@ -859,7 +1060,10 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
                 hintText: 'Write a caption...',
                 filled: true,
                 fillColor: const Color(0xFFF4FAFD),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
               ),
               maxLines: 3,
             ),
@@ -871,15 +1075,23 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: _isPublishing
                   ? const SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white), strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        strokeWidth: 2,
+                      ),
                     )
-                  : const Text('Share Moment', style: TextStyle(fontWeight: FontWeight.bold)),
+                  : const Text(
+                      'Share Moment',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
             const SizedBox(height: 32),
           ],

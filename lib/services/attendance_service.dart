@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
+import 'api_helpers.dart';
 
 class PassDetails {
   final String passToken;
@@ -10,19 +11,26 @@ class PassDetails {
   final DateTime startTime;
   final String address;
 
+  /// Signed passes are valid for two hours; the screen refreshes before this.
+  final DateTime? expiresAt;
+
   PassDetails({
     required this.passToken,
     required this.eventTitle,
     required this.startTime,
     required this.address,
+    this.expiresAt,
   });
 
   factory PassDetails.fromJson(Map<String, dynamic> json) {
     return PassDetails(
       passToken: json['passToken'] ?? '',
       eventTitle: json['eventTitle'] ?? '',
-      startTime: DateTime.parse(json['startTime']),
+      startTime: parseServerDate(json['startTime']),
       address: json['address'] ?? '',
+      expiresAt: json['expiresAt'] is String
+          ? DateTime.tryParse(json['expiresAt'])
+          : null,
     );
   }
 }
@@ -50,8 +58,10 @@ class CompletedDrive {
     return CompletedDrive(
       id: json['id'] ?? '',
       eventId: json['eventId'] ?? '',
-      checkIn: DateTime.parse(json['checkIn']),
-      checkOut: json['checkOut'] != null ? DateTime.parse(json['checkOut']) : null,
+      checkIn: parseServerDate(json['checkIn']),
+      checkOut: json['checkOut'] != null
+          ? DateTime.tryParse(json['checkOut'].toString())
+          : null,
       hoursLogged: (json['hoursLogged'] ?? 0.0).toDouble(),
       eventTitle: json['event']?['title'] ?? '',
       eventCategory: json['event']?['category'] ?? '',
@@ -70,7 +80,17 @@ class AttendanceService extends ChangeNotifier {
   PassDetails? get activePass => _activePass;
   List<CompletedDrive> get history => _history;
 
-  Future<Map<String, dynamic>> fetchPassDetails(String token, String applicationId) async {
+  void clear() {
+    _activePass = null;
+    _history = [];
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> fetchPassDetails(
+    String token,
+    String applicationId,
+  ) async {
     _isLoading = true;
     _activePass = null;
     notifyListeners();
@@ -78,9 +98,7 @@ class AttendanceService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/attendance/pass/$applicationId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       final data = jsonDecode(response.body);
@@ -92,7 +110,10 @@ class AttendanceService extends ChangeNotifier {
         notifyListeners();
         return {'success': true};
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Failed to load pass details'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to load pass details'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -101,7 +122,10 @@ class AttendanceService extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> verifyScannedPass(String token, String passToken) async {
+  Future<Map<String, dynamic>> verifyScannedPass(
+    String token,
+    String passToken,
+  ) async {
     _isLoading = true;
     notifyListeners();
 
@@ -112,9 +136,7 @@ class AttendanceService extends ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({
-          'passToken': passToken,
-        }),
+        body: jsonEncode({'passToken': passToken}),
       );
 
       final data = jsonDecode(response.body);
@@ -131,7 +153,10 @@ class AttendanceService extends ChangeNotifier {
           'pointsAwarded': data['pointsAwarded'],
         };
       } else {
-        return {'success': false, 'message': data['message'] ?? 'Scanned pass verification failed'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Scanned pass verification failed'),
+        };
       }
     } catch (e) {
       _isLoading = false;
@@ -147,13 +172,11 @@ class AttendanceService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/attendance/history'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final data = unwrapList(jsonDecode(response.body));
         _history = data.map((json) => CompletedDrive.fromJson(json)).toList();
       } else {
         _history = [];
@@ -167,13 +190,14 @@ class AttendanceService extends ChangeNotifier {
     }
   }
 
-  Future<Uint8List?> downloadCertificate(String token, String attendanceId) async {
+  Future<Uint8List?> downloadCertificate(
+    String token,
+    String attendanceId,
+  ) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/attendance/certificate/$attendanceId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
         return response.bodyBytes;

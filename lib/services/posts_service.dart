@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
+import 'api_helpers.dart';
 
 class FeedPost {
   final String id;
@@ -48,12 +49,12 @@ class FeedPost {
       id: json['id'] ?? '',
       eventId: json['eventId'] ?? '',
       organizerId: json['organizerId'] ?? '',
-      imageUrl: json['imageUrl'] ?? '',
+      imageUrl: AppConfig.formatMediaUrl(json['imageUrl']) ?? '',
       caption: json['caption'],
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: parseServerDate(json['createdAt']),
       eventTitle: event['title'] ?? 'Community Event',
       organizerName: organizer['fullName'] ?? 'Organizer',
-      organizerAvatar: profile['avatarUrl'],
+      organizerAvatar: AppConfig.formatMediaUrl(profile['avatarUrl']),
       likeCount: json['likeCount'] ?? 0,
       commentCount: json['commentCount'] ?? 0,
       hasLiked: json['hasLiked'] ?? false,
@@ -84,9 +85,9 @@ class PostComment {
     return PostComment(
       id: json['id'] ?? '',
       content: json['content'] ?? '',
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: parseServerDate(json['createdAt']),
       userName: user['fullName'] ?? 'Volunteer',
-      userAvatar: profile['avatarUrl'],
+      userAvatar: AppConfig.formatMediaUrl(profile['avatarUrl']),
     );
   }
 }
@@ -100,6 +101,12 @@ class PostsService extends ChangeNotifier {
   List<FeedPost> get posts => _posts;
   bool get isLoading => _isLoading;
 
+  void clear() {
+    _posts = [];
+    _isLoading = false;
+    notifyListeners();
+  }
+
   Future<void> fetchPosts(String token) async {
     _isLoading = true;
     notifyListeners();
@@ -107,13 +114,11 @@ class PostsService extends ChangeNotifier {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/posts'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final data = unwrapList(jsonDecode(response.body));
         _posts = data.map((json) => FeedPost.fromJson(json)).toList();
       } else {
         _posts = [];
@@ -152,7 +157,10 @@ class PostsService extends ChangeNotifier {
         return {'success': true};
       } else {
         final data = jsonDecode(response.body);
-        return {'success': false, 'message': data['message'] ?? 'Failed to create post'};
+        return {
+          'success': false,
+          'message': apiMessage(data, 'Failed to create post'),
+        };
       }
     } catch (e) {
       return {'success': false, 'message': 'Network failure: $e'};
@@ -171,9 +179,7 @@ class PostsService extends ChangeNotifier {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/posts/$postId/like'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -207,9 +213,7 @@ class PostsService extends ChangeNotifier {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/posts/$postId/save'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -231,7 +235,11 @@ class PostsService extends ChangeNotifier {
     return false;
   }
 
-  Future<PostComment?> addComment(String token, String postId, String content) async {
+  Future<PostComment?> addComment(
+    String token,
+    String postId,
+    String content,
+  ) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/posts/$postId/comments'),
@@ -244,7 +252,7 @@ class PostsService extends ChangeNotifier {
 
       if (response.statusCode == 201) {
         final newComment = PostComment.fromJson(jsonDecode(response.body));
-        
+
         final postIndex = _posts.indexWhere((p) => p.id == postId);
         if (postIndex != -1) {
           _posts[postIndex].comments.add(newComment);
@@ -263,9 +271,7 @@ class PostsService extends ChangeNotifier {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl/posts/$postId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
