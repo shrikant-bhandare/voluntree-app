@@ -440,6 +440,37 @@ class EventService extends ChangeNotifier {
     }
   }
 
+  /// Withdraw the signed-in volunteer's own pending application.
+  ///
+  /// The server refuses once an organizer has approved it, so the error
+  /// message it returns is the one worth showing rather than a generic
+  /// failure.
+  Future<String?> withdrawApplication(
+    String token,
+    String applicationId,
+  ) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/applications/$applicationId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        _userApplications = _userApplications
+            .where((a) => a is Map && a['id'] != applicationId)
+            .toList();
+        notifyListeners();
+        return null;
+      }
+      return apiMessage(
+        jsonDecode(response.body),
+        'Could not withdraw the application',
+      );
+    } catch (e) {
+      debugPrint('withdrawApplication error: $e');
+      return 'Could not reach the server. Check your connection.';
+    }
+  }
+
   Future<void> fetchUserApplications(String token) async {
     try {
       final response = await http.get(

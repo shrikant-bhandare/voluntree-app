@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Volunteer Mobile App</string>
+	<string>Voluntree</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>volunteer_mobile_app</string>
+	<string>Voluntree</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -70,5 +70,18 @@
 	<string>This app needs camera access to scan QR codes for attendance verification and take event cover photos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to your photo library to select event cover images.</string>
+	<!-- geolocator, used by the "Filter by distance" search on Discover. iOS
+	     terminates the app if it reaches a protected API with no purpose
+	     string, so this is required, not advisory. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Voluntree uses your location to show volunteering drives near you. It is only read while you are using the app, and never shared with other volunteers.</string>
+	<!-- record, used for voice notes in organizer/volunteer chat. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Voluntree uses the microphone to record voice notes you choose to send in chat.</string>
+	<!-- The app uses only HTTPS and the platform's own cryptography, which is
+	     exempt. Declaring it here stops App Store Connect asking on every
+	     upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
