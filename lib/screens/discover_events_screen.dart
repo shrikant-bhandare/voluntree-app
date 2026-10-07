@@ -5,6 +5,9 @@ import 'package:provider/provider.dart';
 import '../services/event_service.dart';
 import '../services/auth_service.dart';
 import 'event_detail_screen.dart';
+import '../utils/drive_cta.dart';
+import '../utils/spots_remaining.dart';
+import '../utils/list_state.dart';
 
 class DiscoverEventsScreen extends StatefulWidget {
   final bool isEmbedded;
@@ -140,12 +143,25 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
     }
   }
 
+  /// The signed-in volunteer's applications, refreshed each build.
+  List<dynamic> _applications = const [];
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final eventService = Provider.of<EventService>(context);
     final events = eventService.events;
     final isLoading = eventService.isLoading;
+    // Captured here rather than watched inside the card: cards are produced
+    // from an itemBuilder, which runs during layout, and registering a
+    // dependency there makes a later notifyListeners dirty the element
+    // mid-layout ("setState() called during build").
+    _applications = eventService.userApplications;
+    final feedState = listStateFor(
+      hasLoaded: eventService.hasLoadedEvents,
+      count: events.length,
+      failed: eventService.eventsLoadFailed,
+    );
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -487,6 +503,43 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                       ),
                     ),
                   )
+                : feedState == ListState.failed
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.cloud_off_outlined,
+                          size: 64,
+                          color: Color(0xFF717973),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Could not load drives',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Check your connection and try again.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF717973),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: _refresh,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
                 : events.isEmpty
                 ? Center(
                     child: Column(
@@ -723,21 +776,45 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        // Same wording and the same application-aware CTA the
+                        // home carousel uses. The two listings previously
+                        // disagreed about one drive: "24 spots left / Pending"
+                        // on the home screen, "25 Volunteers Needed / Join
+                        // drive" here.
                         Text(
-                          '${event.volunteersNeeded} Volunteers Needed',
+                          spotsLabel(
+                            volunteersNeeded: event.volunteersNeeded,
+                            approvedCount: event.approvedCount,
+                          ),
                           style: TextStyle(
-                            color: theme.colorScheme.primary,
+                            color:
+                                spotsAreScarce(
+                                  volunteersNeeded: event.volunteersNeeded,
+                                  approvedCount: event.approvedCount,
+                                )
+                                ? const Color(0xFFEF4444)
+                                : theme.colorScheme.primary,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Text(
-                          'Join drive',
-                          style: TextStyle(
-                            color: theme.colorScheme.secondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Builder(
+                          builder: (_) {
+                            final cta = driveCtaFor(
+                              eventId: event.id,
+                              userApplications: _applications,
+                            );
+                            return Text(
+                              cta.isApplied ? cta.label : 'Join drive',
+                              style: TextStyle(
+                                color: cta.isApplied
+                                    ? Colors.grey[600]
+                                    : theme.colorScheme.secondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),

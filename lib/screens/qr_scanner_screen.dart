@@ -18,12 +18,30 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   final MobileScannerController _scannerController = MobileScannerController();
   bool _isVerifying = false;
   bool _isProcessingCode = false;
+
+  /// Set when the camera cannot run at all — notably every browser, where
+  /// mobile_scanner reports `unsupported`. Without a fallback the organizer
+  /// has no way to check anyone in, which matters while the app ships as a
+  /// web build.
+  bool _scannerUnavailable = false;
   PermissionStatus? _cameraPermissionStatus;
 
   @override
   void initState() {
     super.initState();
     _checkCameraPermission();
+  }
+
+  /// Readable copy for a scanner failure. The raw enum
+  /// ("MobileScannerErrorCode.unsupported") was being shown to organizers.
+  String _scannerMessage(MobileScannerException error) {
+    if (kIsWeb || error.errorCode == MobileScannerErrorCode.unsupported) {
+      return "Camera scanning is not available in this browser. Enter the volunteer's pass code below instead.";
+    }
+    if (error.errorCode == MobileScannerErrorCode.permissionDenied) {
+      return "Camera access was denied. Allow the camera, or enter the pass code below.";
+    }
+    return "The camera could not be started. Enter the volunteer's pass code below instead.";
   }
 
   Future<void> _checkCameraPermission() async {
@@ -270,6 +288,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                             }
                           },
                           errorBuilder: (context, error) {
+                            // Flip to the manual fallback once we know the
+                            // camera will never start. Scheduled out of build.
+                            if (!_scannerUnavailable) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  setState(() => _scannerUnavailable = true);
+                                }
+                              });
+                            }
                             return Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -281,7 +308,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Camera Error: ${error.errorCode}',
+                                    _scannerMessage(error),
+                                    textAlign: TextAlign.center,
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
@@ -405,9 +433,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Manual token input panel — debug builds only; it was
-              // shipping in release UI.
-              if (kDebugMode)
+              // Manual token input panel. Hidden while the camera works so
+              // the normal path stays uncluttered, but shown whenever
+              // scanning is impossible — otherwise the screen is a dead end.
+              // This is not a security bypass: the pass is HMAC-signed and
+              // re-verified server-side, so a typed token is exactly as
+              // trustworthy as a scanned one.
+              if (kDebugMode || _scannerUnavailable)
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(

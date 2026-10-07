@@ -224,7 +224,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _identifierController,
                           style: TextStyle(color: theme.colorScheme.onSurface),
                           decoration: InputDecoration(
-                            hintText: 'Enter Email or Mobile Number',
+                            // Kept short so it does not truncate at 375 px, where it was
+                            // rendering as "Enter Email or Mobile Nu...".
+                            hintText: 'Email or mobile number',
                             hintStyle: const TextStyle(
                               color: Color(0xFF717973),
                             ),

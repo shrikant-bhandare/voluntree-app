@@ -111,6 +111,16 @@ class EventService extends ChangeNotifier {
   List<EventModel> _events = [];
   List<dynamic> _organizerApplications = [];
   List<dynamic> _userApplications = [];
+
+  /// Whether /events/mine has come back at least once. Without this the
+  /// dashboard cannot tell "no drives" from "not asked yet".
+  bool _hasLoadedMyEvents = false;
+
+  /// Whether the last public-events load failed. A wiped list and an empty
+  /// result are indistinguishable otherwise, so a dropped request rendered as
+  /// "No matching events found".
+  bool _eventsLoadFailed = false;
+  bool _hasLoadedEvents = false;
   Map<String, dynamic>? _organizerAnalytics;
   List<EventModel> _myEvents = [];
   bool _isLoading = false;
@@ -118,6 +128,9 @@ class EventService extends ChangeNotifier {
   List<EventModel> get events => _events;
   List<dynamic> get organizerApplications => _organizerApplications;
   List<dynamic> get userApplications => _userApplications;
+  bool get hasLoadedMyEvents => _hasLoadedMyEvents;
+  bool get eventsLoadFailed => _eventsLoadFailed;
+  bool get hasLoadedEvents => _hasLoadedEvents;
   Map<String, dynamic>? get organizerAnalytics => _organizerAnalytics;
   List<EventModel> get myEvents => _myEvents;
   bool get isLoading => _isLoading;
@@ -158,14 +171,18 @@ class EventService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = unwrapList(jsonDecode(response.body));
         _events = data.map((json) => EventModel.fromJson(json)).toList();
+        _eventsLoadFailed = false;
       } else {
         _events = [];
+        _eventsLoadFailed = true;
       }
     } catch (e) {
       debugPrint('FetchEvents Connection Error: $e');
       _events = [];
+      _eventsLoadFailed = true;
     } finally {
       _isLoading = false;
+      _hasLoadedEvents = true;
       notifyListeners();
     }
   }
@@ -195,10 +212,14 @@ class EventService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = unwrapList(jsonDecode(response.body));
         _myEvents = data.map((json) => EventModel.fromJson(json)).toList();
-        notifyListeners();
       }
     } catch (e) {
       debugPrint('fetchMyEvents error: $e');
+    } finally {
+      // Set on failure too: a failed load is still "we asked". Leaving it
+      // false would spin forever instead of showing the empty state.
+      _hasLoadedMyEvents = true;
+      notifyListeners();
     }
   }
 
@@ -207,6 +228,9 @@ class EventService extends ChangeNotifier {
   void clear() {
     _events = [];
     _myEvents = [];
+    _hasLoadedMyEvents = false;
+    _eventsLoadFailed = false;
+    _hasLoadedEvents = false;
     _organizerApplications = [];
     _userApplications = [];
     _organizerAnalytics = null;

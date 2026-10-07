@@ -18,8 +18,21 @@ import 'screens/home_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+/// Force the semantics tree on. Off unless a build passes
+/// `--dart-define=ENABLE_SEMANTICS=true`, so production is unaffected.
+///
+/// On the web Flutter only builds the semantics tree after the user activates
+/// the "Enable accessibility" affordance, which needs a real user gesture.
+/// That leaves automated UI checks with nothing to address on a canvas-rendered
+/// page. Turning it on for test builds also makes the app auditable with
+/// ordinary accessibility tooling.
+const bool _forceSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
+
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  if (_forceSemantics) {
+    binding.ensureSemantics();
+  }
 
   // Firebase web needs its own generated options + a messaging service
   // worker; neither is configured, so the web build relies on the in-app

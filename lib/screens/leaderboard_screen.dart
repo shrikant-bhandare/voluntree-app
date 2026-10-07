@@ -370,8 +370,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             ),
                             alignment: Alignment.center,
                             child: Text(
-                              (currentUser?.profile?.reputationLevel ?? 'B')
-                                  .substring(0, 1),
+                              // The person's initial. This circle reads as an
+                              // avatar everywhere else in the app, but showed
+                              // the reputation level's first letter — so a
+                              // GOLD volunteer called Alex saw "G". The level
+                              // is already spelled out beside it.
+                              (currentUser?.fullName.trim().isNotEmpty == true
+                                      ? currentUser!.fullName.trim()
+                                      : 'V')
+                                  .substring(0, 1)
+                                  .toUpperCase(),
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,

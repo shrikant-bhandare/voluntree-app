@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../utils/drive_cta.dart';
+import '../utils/spots_remaining.dart';
+import '../utils/list_state.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
@@ -97,14 +100,24 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         };
 
-        Provider.of<AttendanceService>(
-          context,
-          listen: false,
-        ).fetchHistory(authService.token!);
-
         final isOrganizer =
             authService.currentUser?.userType == 'ORGANIZER' ||
             authService.currentUser?.userType == 'ADMIN';
+        if (!isOrganizer) {
+          // Volunteer-only endpoints. Calling these for an organizer is not
+          // merely wasteful — GET /attendance/history is @VolunteerOrAdmin, so
+          // an organizer session fired a guaranteed 403 on every launch.
+          Provider.of<AttendanceService>(
+            context,
+            listen: false,
+          ).fetchHistory(authService.token!);
+          // Without this the featured cards have no application data and fall
+          // back to offering "Join" for drives already applied to.
+          Provider.of<EventService>(
+            context,
+            listen: false,
+          ).fetchUserApplications(authService.token!);
+        }
         if (isOrganizer) {
           Provider.of<EventService>(
             context,
@@ -1576,6 +1589,18 @@ class VolunteerDashboardTab extends StatelessWidget {
                     itemCount: events.take(5).length,
                     itemBuilder: (context, index) {
                       final event = events[index];
+                      // A drive the volunteer already applied to must not keep
+                      // advertising "Join" — the detail screen showed the real
+                      // state, the card did not.
+                      // Read from the already-listening `eventService` above,
+                      // not context.watch here: itemBuilder runs during
+                      // layout, and registering a dependency there makes a
+                      // later notifyListeners mark this element dirty
+                      // mid-layout ("setState() called during build").
+                      final cta = driveCtaFor(
+                        eventId: event.id,
+                        userApplications: eventService.userApplications,
+                      );
                       return Container(
                         width: 260,
                         margin: const EdgeInsets.only(right: 16),
@@ -1689,9 +1714,25 @@ class VolunteerDashboardTab extends StatelessWidget {
                                           MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
-                                          '${event.volunteersNeeded} spots left',
-                                          style: const TextStyle(
-                                            color: Color(0xFFEF4444),
+                                          spotsLabel(
+                                            volunteersNeeded:
+                                                event.volunteersNeeded,
+                                            approvedCount: event.approvedCount,
+                                          ),
+                                          style: TextStyle(
+                                            // Red means "hurry". Reserve it for
+                                            // drives that are genuinely nearly
+                                            // full instead of painting every
+                                            // card with an alarm colour.
+                                            color:
+                                                spotsAreScarce(
+                                                  volunteersNeeded:
+                                                      event.volunteersNeeded,
+                                                  approvedCount:
+                                                      event.approvedCount,
+                                                )
+                                                ? const Color(0xFFEF4444)
+                                                : Colors.grey[600],
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -1702,15 +1743,20 @@ class VolunteerDashboardTab extends StatelessWidget {
                                             vertical: 4,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: theme.colorScheme.primary,
+                                            color: cta.isApplied
+                                                ? theme.colorScheme.primary
+                                                      .withValues(alpha: 0.12)
+                                                : theme.colorScheme.primary,
                                             borderRadius: BorderRadius.circular(
                                               12,
                                             ),
                                           ),
-                                          child: const Text(
-                                            'Join',
+                                          child: Text(
+                                            cta.label,
                                             style: TextStyle(
-                                              color: Colors.white,
+                                              color: cta.isApplied
+                                                  ? theme.colorScheme.primary
+                                                  : Colors.white,
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
                                             ),
@@ -1857,7 +1903,16 @@ class VolunteerDashboardTab extends StatelessWidget {
                                             ),
                                             const SizedBox(width: 4),
                                             Text(
-                                              '${event.volunteersNeeded} volunteers needed',
+                                              // Same wording as the card
+                                              // carousel above; this row used
+                                              // to state total capacity while
+                                              // the card stated places left.
+                                              spotsLabel(
+                                                volunteersNeeded:
+                                                    event.volunteersNeeded,
+                                                approvedCount:
+                                                    event.approvedCount,
+                                              ),
                                               style: const TextStyle(
                                                 color: Colors.grey,
                                                 fontSize: 10,
@@ -1942,6 +1997,13 @@ class OrganizerDashboardTab extends StatelessWidget {
         : eventService.events.where((e) => e.organizerId == user?.id).toList();
 
     final apps = eventService.organizerApplications;
+    // Until /events/mine has answered, this screen knows nothing about the
+    // account — it must not claim the organizer has no drives.
+    final driveState = listStateFor(
+      hasLoaded: eventService.hasLoadedMyEvents,
+      count: events.length,
+    );
+    final loading = driveState == ListState.loading;
     final pendingCount = apps.where((app) => app['status'] == 'PENDING').length;
     final confirmedCount = apps
         .where((app) => app['status'] == 'APPROVED')
@@ -2019,7 +2081,7 @@ class OrganizerDashboardTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${events.length}',
+                        loading ? '—' : '${events.length}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 24,
@@ -2166,7 +2228,18 @@ class OrganizerDashboardTab extends StatelessWidget {
           const SizedBox(height: 12),
 
           // Organizer Events List
-          events.isEmpty
+          loading
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  ),
+                )
+              : events.isEmpty
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40),
@@ -2179,8 +2252,16 @@ class OrganizerDashboardTab extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'No active events published.',
+                          'No drives published yet.',
                           style: TextStyle(color: Colors.grey[500]),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Tap + to publish your first drive.',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),

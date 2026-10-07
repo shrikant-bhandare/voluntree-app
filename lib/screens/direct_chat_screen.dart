@@ -1223,22 +1223,59 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
               horizontal: 24.0,
               vertical: 20.0,
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            // Wrap, not Row: six options do not fit on one line at 375 px.
+            // Document, location, voice note and contact sharing were all
+            // implemented but reachable from nowhere — the sheet only ever
+            // offered photo and video.
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 20,
+              runSpacing: 18,
               children: [
-                _buildAttachmentOption(
-                  Icons.image,
-                  'Photo Gallery',
-                  Colors.purple,
-                  () {
-                    Navigator.pop(context);
-                    _pickImage();
-                  },
-                ),
+                _buildAttachmentOption(Icons.image, 'Photo', Colors.purple, () {
+                  Navigator.pop(context);
+                  _pickImage();
+                }),
                 _buildAttachmentOption(Icons.videocam, 'Video', Colors.red, () {
                   Navigator.pop(context);
                   _pickVideo();
                 }),
+                _buildAttachmentOption(
+                  Icons.insert_drive_file,
+                  'Document',
+                  Colors.blue,
+                  () {
+                    Navigator.pop(context);
+                    _pickDocument();
+                  },
+                ),
+                _buildAttachmentOption(
+                  Icons.location_on,
+                  'Location',
+                  Colors.green,
+                  () {
+                    Navigator.pop(context);
+                    _shareLocation();
+                  },
+                ),
+                _buildAttachmentOption(
+                  Icons.mic,
+                  'Voice Note',
+                  Colors.orange,
+                  () {
+                    Navigator.pop(context);
+                    _recordVoiceNote();
+                  },
+                ),
+                _buildAttachmentOption(
+                  Icons.person,
+                  'Contact',
+                  Colors.teal,
+                  () {
+                    Navigator.pop(context);
+                    _shareContact();
+                  },
+                ),
               ],
             ),
           ),
