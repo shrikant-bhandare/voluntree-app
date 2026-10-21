@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/leaderboard_service.dart';
 import '../widgets/responsive.dart';
+import '../utils/text_utils.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -13,8 +14,6 @@ class LeaderboardScreen extends StatefulWidget {
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
-  bool _isLocal = true;
-
   @override
   void initState() {
     super.initState();
@@ -70,9 +69,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             radius: 18,
             backgroundColor: theme.colorScheme.secondaryContainer,
             child: Text(
-              currentUser?.fullName.isNotEmpty == true
-                  ? currentUser!.fullName[0].toUpperCase()
-                  : 'V',
+              initialOf(currentUser?.fullName, fallback: 'V'),
               style: TextStyle(
                 color: theme.colorScheme.primary,
                 fontWeight: FontWeight.bold,
@@ -101,101 +98,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Segmented Control (Toggle Toggle)
-                          Center(
-                            child: Container(
-                              width: 280,
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE8EFF1),
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: GestureDetector(
-                                      onTap: () =>
-                                          setState(() => _isLocal = true),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _isLocal
-                                              ? Colors.white
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                          boxShadow: _isLocal
-                                              ? [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withOpacity(0.05),
-                                                    blurRadius: 4,
-                                                  ),
-                                                ]
-                                              : null,
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          'Local',
-                                          style: TextStyle(
-                                            color: _isLocal
-                                                ? theme.colorScheme.primary
-                                                : const Color(0xFF717973),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: GestureDetector(
-                                      onTap: () =>
-                                          setState(() => _isLocal = false),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: !_isLocal
-                                              ? Colors.white
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                          boxShadow: !_isLocal
-                                              ? [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withOpacity(0.05),
-                                                    blurRadius: 4,
-                                                  ),
-                                                ]
-                                              : null,
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          'Global',
-                                          style: TextStyle(
-                                            color: !_isLocal
-                                                ? theme.colorScheme.primary
-                                                : const Color(0xFF717973),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
                           // Top 3 Podium Section / List View
                           if (displayUsers.isEmpty)
                             Container(
@@ -411,31 +313,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                               ],
                             ),
                           ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFD8704),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(
-                                context,
-                              ).pop(); // Back to explore/home events
-                            },
-                            child: const Text(
-                              'Join Event',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -514,7 +391,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 radius: size / 2,
                 backgroundColor: const Color(0xFFF4FAFD),
                 child: Text(
-                  user.fullName[0],
+                  initialOf(user.fullName),
                   style: TextStyle(
                     color: const Color(0xFF012D1D),
                     fontWeight: FontWeight.bold,
@@ -560,17 +437,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              user.fullName.split(' ')[0],
+              user.fullName.trim().isEmpty
+                  ? 'Volunteer'
+                  : user.fullName.trim().split(' ')[0],
               style: const TextStyle(
                 color: Color(0xFF012D1D),
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
               ),
             ),
-            if (rank == 1) ...[
-              const SizedBox(width: 2),
-              const Icon(Icons.verified, color: Color(0xFF006C48), size: 13),
-            ],
           ],
         ),
         const SizedBox(height: 2),
@@ -622,7 +497,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             radius: 18,
             backgroundColor: theme.colorScheme.secondaryContainer,
             child: Text(
-              user.fullName[0],
+              initialOf(user.fullName),
               style: TextStyle(
                 color: theme.colorScheme.primary,
                 fontWeight: FontWeight.bold,

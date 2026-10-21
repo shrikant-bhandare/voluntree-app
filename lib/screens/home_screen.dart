@@ -5,10 +5,9 @@ import '../utils/list_state.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
-import '../services/payments_service.dart';
-import '../services/posts_service.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
+import '../services/category_service.dart';
 import '../widgets/animated_button.dart';
 import '../services/notification_service.dart';
 import '../services/chat_service.dart';
@@ -29,6 +28,12 @@ import 'edit_profile_screen.dart';
 import 'event_feed_screen.dart';
 import '../widgets/in_app_notification.dart';
 import '../widgets/responsive.dart';
+import '../utils/event_time.dart';
+import '../utils/session.dart';
+import '../utils/text_utils.dart';
+import '../widgets/confirm_dialog.dart';
+import '../config.dart';
+import 'account_settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -54,6 +59,10 @@ class _HomeScreenState extends State<HomeScreen> {
         // mounted before touching its context.
         notif.onNotificationReceived = (newNotif) {
           if (!mounted) return;
+          // A notification may announce an account change (NGO approval or
+          // revocation). Re-read the account so the right shell appears
+          // without restarting the app.
+          _refreshAccount();
           InAppNotification.show(
             context,
             title: newNotif.title,
@@ -100,42 +109,52 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         };
 
-        final isOrganizer =
-            authService.currentUser?.userType == 'ORGANIZER' ||
-            authService.currentUser?.userType == 'ADMIN';
-        if (!isOrganizer) {
-          // Volunteer-only endpoints. Calling these for an organizer is not
-          // merely wasteful — GET /attendance/history is @VolunteerOrAdmin, so
-          // an organizer session fired a guaranteed 403 on every launch.
-          Provider.of<AttendanceService>(
-            context,
-            listen: false,
-          ).fetchHistory(authService.token!);
-          // Without this the featured cards have no application data and fall
-          // back to offering "Join" for drives already applied to.
-          Provider.of<EventService>(
-            context,
-            listen: false,
-          ).fetchUserApplications(authService.token!);
-        }
-        if (isOrganizer) {
-          Provider.of<EventService>(
-            context,
-            listen: false,
-          ).fetchOrganizerApplications(authService.token!);
-          Provider.of<EventService>(
-            context,
-            listen: false,
-          ).fetchOrganizerAnalytics(authService.token!);
-          Provider.of<EventService>(
-            context,
-            listen: false,
-          ).fetchMyEvents(authService.token!);
-        }
+        _loadRoleData();
       }
       // Load events globally
       Provider.of<EventService>(context, listen: false).fetchEvents();
+      Provider.of<CategoryService>(context, listen: false).ensureLoaded();
     });
+  }
+
+  /// Re-reads `/auth/me`; if the role changed (e.g. NGO approved), resets to
+  /// the first tab and loads that role's data.
+  Future<void> _refreshAccount() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final before = authService.currentUser?.userType;
+    await authService.fetchMe();
+    if (!mounted) return;
+    final after = authService.currentUser?.userType;
+    if (after != null && after != before) {
+      setState(() => _currentIndex = 0);
+      _loadRoleData();
+    }
+  }
+
+  void _loadRoleData() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final token = authService.token;
+    if (token == null) return;
+    final eventService = Provider.of<EventService>(context, listen: false);
+    final isOrganizer =
+        authService.currentUser?.userType == 'ORGANIZER' ||
+        authService.currentUser?.userType == 'ADMIN';
+    if (isOrganizer) {
+      eventService.fetchOrganizerApplications(token);
+      eventService.fetchOrganizerAnalytics(token);
+      eventService.fetchMyEvents(token);
+    } else {
+      // Volunteer-only endpoints. Calling these for an organizer is not
+      // merely wasteful — GET /attendance/history is @VolunteerOrAdmin, so
+      // an organizer session fired a guaranteed 403 on every launch.
+      Provider.of<AttendanceService>(
+        context,
+        listen: false,
+      ).fetchHistory(token);
+      // Without this the featured cards have no application data and fall
+      // back to offering "Join" for drives already applied to.
+      eventService.fetchUserApplications(token);
+    }
   }
 
   ChatService? _chat;
@@ -157,20 +176,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _chat?.disconnectSocket();
     _notif?.onNotificationReceived = null;
     super.dispose();
-  }
-
-  /// Every service keeps a cache; without this the next account signed in on
-  /// the same device saw the previous user's drives, chats and hours until
-  /// each refetch happened to succeed.
-  void _clearSessionCaches(BuildContext context) {
-    Provider.of<ChatService>(context, listen: false)
-      ..disconnectSocket()
-      ..clear();
-    Provider.of<NotificationService>(context, listen: false).clear();
-    Provider.of<EventService>(context, listen: false).clear();
-    Provider.of<AttendanceService>(context, listen: false).clear();
-    Provider.of<PaymentsService>(context, listen: false).clear();
-    Provider.of<PostsService>(context, listen: false).clear();
   }
 
   Widget _buildNavItem(int index, IconData icon, String label) {
@@ -404,14 +409,40 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _accountTile(BuildContext context) {
+    return ListTile(
+      leading: const Icon(
+        Icons.manage_accounts_outlined,
+        color: Color(0xFF012D1D),
+      ),
+      title: const Text(
+        'Account & privacy',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      subtitle: const Text(
+        'Download your data or delete your account',
+        style: TextStyle(fontSize: 12),
+      ),
+      onTap: () {
+        Navigator.of(context).pop();
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AccountSettingsScreen(),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildDrawer(BuildContext context, bool isOrganizer, dynamic user) {
-    final authService = Provider.of<AuthService>(context, listen: false);
     final profile = user?.profile;
 
     // Initials for avatar fallback
-    final initials = user?.fullName != null && user!.fullName.isNotEmpty
-        ? user.fullName[0].toUpperCase()
-        : (isOrganizer ? 'O' : 'V');
+    final initials = initialOf(
+      user?.fullName as String?,
+      fallback: isOrganizer ? 'O' : 'V',
+    );
 
     return Drawer(
       backgroundColor: Colors.white,
@@ -582,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                         },
                       ),
-                      if (user?.isVerified == true)
+                      if (AppConfig.paymentsEnabled && user?.isVerified == true)
                         ListTile(
                           leading: const Icon(
                             Icons.payment,
@@ -602,6 +633,26 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
+                      ListTile(
+                        leading: const Icon(
+                          Icons.edit_outlined,
+                          color: Color(0xFF012D1D),
+                        ),
+                        title: const Text(
+                          'Edit Profile',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const EditProfileScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _accountTile(context),
                       const Divider(),
                       ListTile(
                         leading: Icon(
@@ -714,25 +765,26 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                         },
                       ),
-                      ListTile(
-                        leading: const Icon(
-                          Icons.payment,
-                          color: Color(0xFF0E6C4A),
+                      if (AppConfig.paymentsEnabled)
+                        ListTile(
+                          leading: const Icon(
+                            Icons.payment,
+                            color: Color(0xFF0E6C4A),
+                          ),
+                          title: const Text(
+                            'Sponsor & Donate',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const PaymentsScreen(),
+                              ),
+                            );
+                          },
                         ),
-                        title: const Text(
-                          'Sponsor & Donate',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const PaymentsScreen(),
-                            ),
-                          );
-                        },
-                      ),
                       ListTile(
                         leading: const Icon(
                           Icons.person,
@@ -749,6 +801,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           });
                         },
                       ),
+                      _accountTile(context),
                       ListTile(
                         leading: const Icon(
                           Icons.verified_user_outlined,
@@ -812,10 +865,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            onTap: () {
+            onTap: () async {
               Navigator.of(context).pop();
-              _clearSessionCaches(context);
-              authService.logout();
+              final ok = await confirmAction(
+                this.context,
+                title: 'Log out?',
+                message: 'You will need a new sign-in code to log back in.',
+                confirmLabel: 'Log out',
+              );
+              if (!ok || !mounted) return;
+              await endSession(this.context);
             },
           ),
           const SizedBox(height: 20),
@@ -1206,628 +1265,379 @@ class VolunteerDashboardTab extends StatelessWidget {
     final double hours = loggedHours;
     final int eventsCount = completedDrives.length;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Greeting & Profile Bar
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: theme.colorScheme.secondaryContainer,
-                backgroundImage:
-                    profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty
-                    ? NetworkImage(profile.avatarUrl!)
-                    : null,
-                onBackgroundImageError:
-                    profile?.avatarUrl != null && profile!.avatarUrl!.isNotEmpty
-                    ? (_, _) {}
-                    : null,
-                child: profile?.avatarUrl == null || profile!.avatarUrl!.isEmpty
-                    ? Text(
-                        user?.fullName.isNotEmpty == true
-                            ? user!.fullName[0].toUpperCase()
-                            : 'V',
-                        style: TextStyle(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Welcome back,',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  ),
-                  Text(
-                    user?.fullName ?? 'Volunteer',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+    return RefreshIndicator(
+      onRefresh: () async {
+        final token = authService.token;
+        await Future.wait([
+          eventService.fetchEvents(),
+          if (token != null) eventService.fetchUserApplications(token),
+          if (token != null) attService.fetchHistory(token),
+          authService.fetchMe(),
+        ]);
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Greeting & Profile Bar
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: theme.colorScheme.secondaryContainer,
+                  backgroundImage:
+                      profile?.avatarUrl != null &&
+                          profile!.avatarUrl!.isNotEmpty
+                      ? NetworkImage(profile.avatarUrl!)
+                      : null,
+                  onBackgroundImageError:
+                      profile?.avatarUrl != null &&
+                          profile!.avatarUrl!.isNotEmpty
+                      ? (_, _) {}
+                      : null,
+                  child:
+                      profile?.avatarUrl == null || profile!.avatarUrl!.isEmpty
+                      ? Text(
+                          user?.fullName.isNotEmpty == true
+                              ? initialOf(user!.fullName)
+                              : 'V',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Welcome back,',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
+                    Text(
+                      user?.fullName ?? 'Volunteer',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
 
-          // Bento Stats Grid (Impact Card + Monthly Goal)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Left: Your Impact Card
-              Expanded(
-                flex: 4,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  height: 160,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1B4332), Color(0xFF012D1D)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+            // Bento Stats Grid (Impact Card + Monthly Goal)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left: Your Impact Card
+                Expanded(
+                  flex: 4,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    height: 160,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1B4332), Color(0xFF012D1D)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF012D1D).withOpacity(0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF012D1D).withOpacity(0.15),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Your Impact',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Your Impact',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Every hour counts',
-                            style: TextStyle(
-                              color: Color(0xFFA0F4C8),
-                              fontSize: 10,
+                            SizedBox(height: 2),
+                            Text(
+                              'Every hour counts',
+                              style: TextStyle(
+                                color: Color(0xFFA0F4C8),
+                                fontSize: 10,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                hours.toStringAsFixed(1),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1,
-                                ),
-                              ),
-                              const Text(
-                                'Hours Served',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$eventsCount',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1,
-                                ),
-                              ),
-                              const Text(
-                                'Events',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          // Badges Row overlapping
-                          SizedBox(
-                            width: 44,
-                            height: 24,
-                            child: Stack(
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Positioned(
-                                  left: 0,
-                                  child: CircleAvatar(
-                                    radius: 11,
-                                    backgroundColor: const Color(0xFFF59E0B),
-                                    child: const Icon(
-                                      Icons.workspace_premium,
-                                      color: Colors.white,
-                                      size: 12,
-                                    ),
+                                Text(
+                                  hours.toStringAsFixed(1),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1,
                                   ),
                                 ),
-                                Positioned(
-                                  left: 10,
-                                  child: CircleAvatar(
-                                    radius: 11,
-                                    backgroundColor: const Color(0xFF10B981),
-                                    child: const Icon(
-                                      Icons.eco,
-                                      color: Colors.white,
-                                      size: 12,
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  left: 20,
-                                  child: CircleAvatar(
-                                    radius: 11,
-                                    backgroundColor: const Color(0xFFEF4444),
-                                    child: const Icon(
-                                      Icons.favorite,
-                                      color: Colors.white,
-                                      size: 12,
-                                    ),
+                                const Text(
+                                  'Hours Served',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '$eventsCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1,
+                                  ),
+                                ),
+                                const Text(
+                                  'Events',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
+                const SizedBox(width: 12),
 
-              // Right: Monthly Goal
-              Expanded(
-                flex: 3,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  height: 160,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: const Color(0xFFE8EFF1)),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Monthly Goal',
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const Icon(
-                            Icons.trending_up,
-                            color: Color(0xFF006C48),
-                            size: 16,
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '$progressPct%',
-                            style: const TextStyle(
-                              color: Color(0xFF012D1D),
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                              height: 1,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${loggedHours.toStringAsFixed(1)} / ${goalHours.toStringAsFixed(0)} hours',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              backgroundColor: const Color(0xFFE8EFF1),
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Color(0xFF006C48),
+                // Right: Monthly Goal
+                Expanded(
+                  flex: 3,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    height: 160,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFE8EFF1)),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.02),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Monthly Goal',
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
                               ),
-                              minHeight: 6,
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            remainingHours > 0
-                                ? '${remainingHours.toStringAsFixed(1)} hrs left to goal!'
-                                : 'Goal achieved!',
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 8,
+                            const Icon(
+                              Icons.trending_up,
+                              color: Color(0xFF006C48),
+                              size: 16,
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$progressPct%',
+                              style: const TextStyle(
+                                color: Color(0xFF012D1D),
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                height: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${loggedHours.toStringAsFixed(1)} / ${goalHours.toStringAsFixed(0)} hours',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                backgroundColor: const Color(0xFFE8EFF1),
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF006C48),
+                                ),
+                                minHeight: 6,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              remainingHours > 0
+                                  ? '${remainingHours.toStringAsFixed(1)} hrs left to goal!'
+                                  : 'Goal achieved!',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
+              ],
+            ),
+            const SizedBox(height: 28),
 
-          // Horizontal Quick Links / Action Panel
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildQuickAction(context, Icons.leaderboard, 'Rankings', () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const LeaderboardScreen(),
-                  ),
-                );
-              }),
-              _buildQuickAction(context, Icons.qr_code_2, 'My Passes', () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const VolunteerEventsScreen(),
-                  ),
-                );
-              }),
-              _buildQuickAction(
-                context,
-                Icons.check_circle_outline,
-                'Completions',
-                () {
+            // Horizontal Quick Links / Action Panel
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildQuickAction(context, Icons.leaderboard, 'Rankings', () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const CompletionsScreen(),
+                      builder: (context) => const LeaderboardScreen(),
                     ),
                   );
-                },
-              ),
-              _buildQuickAction(context, Icons.payment, 'Sponsor', () {
-                Navigator.push(
+                }),
+                _buildQuickAction(context, Icons.qr_code_2, 'My Passes', () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const VolunteerEventsScreen(),
+                    ),
+                  );
+                }),
+                _buildQuickAction(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const PaymentsScreen(),
-                  ),
-                );
-              }),
-            ],
-          ),
-          const SizedBox(height: 28),
+                  Icons.check_circle_outline,
+                  'Completions',
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CompletionsScreen(),
+                      ),
+                    );
+                  },
+                ),
+                if (AppConfig.paymentsEnabled)
+                  _buildQuickAction(context, Icons.payment, 'Sponsor', () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PaymentsScreen(),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+            const SizedBox(height: 28),
 
-          // Section Header: Featured Drives
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Featured Drives',
-                style: GoogleFonts.plusJakartaSans(
-                  textStyle: TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+            // Section Header: Featured Drives
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Featured Drives',
+                  style: GoogleFonts.plusJakartaSans(
+                    textStyle: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              const Icon(
-                Icons.arrow_forward,
-                size: 18,
-                color: Color(0xFF006C48),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Horizontal Scrolling featured events list
-          SizedBox(
-            height: 220,
-            child: events.isEmpty
-                ? Center(
-                    child: Text(
-                      'No featured drives available.',
-                      style: TextStyle(color: Colors.grey[500]),
-                    ),
-                  )
-                : ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: events.take(5).length,
-                    itemBuilder: (context, index) {
-                      final event = events[index];
-                      // A drive the volunteer already applied to must not keep
-                      // advertising "Join" — the detail screen showed the real
-                      // state, the card did not.
-                      // Read from the already-listening `eventService` above,
-                      // not context.watch here: itemBuilder runs during
-                      // layout, and registering a dependency there makes a
-                      // later notifyListeners mark this element dirty
-                      // mid-layout ("setState() called during build").
-                      final cta = driveCtaFor(
-                        eventId: event.id,
-                        userApplications: eventService.userApplications,
-                      );
-                      return Container(
-                        width: 260,
-                        margin: const EdgeInsets.only(right: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(color: const Color(0xFFE8EFF1)),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    EventDetailScreen(eventId: event.id),
-                              ),
-                            );
-                          },
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Top half: image & category overlay
-                              Stack(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      (event.bannerUrl != null &&
-                                              event.bannerUrl!.isNotEmpty)
-                                          ? event.bannerUrl!
-                                          : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500',
-                                      height: 100,
-                                      width: double.infinity,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return Container(
-                                              color: Colors.green[100],
-                                              height: 100,
-                                            );
-                                          },
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 8,
-                                    left: 8,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: theme
-                                            .colorScheme
-                                            .secondaryContainer,
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        event.category,
-                                        style: TextStyle(
-                                          color: theme.colorScheme.primary,
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Bottom details
-                              Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      event.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: theme.colorScheme.primary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.location_on_outlined,
-                                          size: 12,
-                                          color: Colors.grey[600],
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            event.address,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          spotsLabel(
-                                            volunteersNeeded:
-                                                event.volunteersNeeded,
-                                            approvedCount: event.approvedCount,
-                                          ),
-                                          style: TextStyle(
-                                            // Red means "hurry". Reserve it for
-                                            // drives that are genuinely nearly
-                                            // full instead of painting every
-                                            // card with an alarm colour.
-                                            color:
-                                                spotsAreScarce(
-                                                  volunteersNeeded:
-                                                      event.volunteersNeeded,
-                                                  approvedCount:
-                                                      event.approvedCount,
-                                                )
-                                                ? const Color(0xFFEF4444)
-                                                : Colors.grey[600],
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: cta.isApplied
-                                                ? theme.colorScheme.primary
-                                                      .withValues(alpha: 0.12)
-                                                : theme.colorScheme.primary,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            cta.label,
-                                            style: TextStyle(
-                                              color: cta.isApplied
-                                                  ? theme.colorScheme.primary
-                                                  : Colors.white,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          const SizedBox(height: 28),
-
-          // Section Header: Near You
-          Text(
-            'Events Near You',
-            style: GoogleFonts.plusJakartaSans(
-              textStyle: TextStyle(
-                color: theme.colorScheme.primary,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+                const Icon(
+                  Icons.arrow_forward,
+                  size: 18,
+                  color: Color(0xFF006C48),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          // Vertical Near You List
-          events.isEmpty
-              ? Center(
-                  child: Text(
-                    'No events nearby.',
-                    style: TextStyle(color: Colors.grey[500]),
-                  ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: events.length,
-                  itemBuilder: (context, index) {
-                    final event = events[index];
-
-                    // Simple dynamic left border colors based on indexes
-                    Color leftBorderColor = theme.colorScheme.secondary;
-                    if (index % 3 == 1)
-                      leftBorderColor = const Color(0xFFFD8704);
-                    if (index % 3 == 2)
-                      leftBorderColor = theme.colorScheme.secondaryContainer;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: const Color(0xFFE8EFF1)),
-                        borderRadius: BorderRadius.circular(12),
+            // Horizontal Scrolling featured events list
+            SizedBox(
+              height: 220,
+              child: events.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No featured drives available.',
+                        style: TextStyle(color: Colors.grey[500]),
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
+                    )
+                  : ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: events.take(5).length,
+                      itemBuilder: (context, index) {
+                        final event = events[index];
+                        // A drive the volunteer already applied to must not keep
+                        // advertising "Join" — the detail screen showed the real
+                        // state, the card did not.
+                        // Read from the already-listening `eventService` above,
+                        // not context.watch here: itemBuilder runs during
+                        // layout, and registering a dependency there makes a
+                        // later notifyListeners mark this element dirty
+                        // mid-layout ("setState() called during build").
+                        final cta = driveCtaFor(
+                          eventId: event.id,
+                          userApplications: eventService.userApplications,
+                        );
+                        return Container(
+                          width: 260,
+                          margin: const EdgeInsets.only(right: 16),
                           decoration: BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: leftBorderColor,
-                                width: 4,
-                              ),
-                            ),
+                            color: Colors.white,
+                            border: Border.all(color: const Color(0xFFE8EFF1)),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                           child: InkWell(
                             onTap: () {
@@ -1839,105 +1649,329 @@ class VolunteerDashboardTab extends StatelessWidget {
                                 ),
                               );
                             },
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  // Left image
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      (event.bannerUrl != null &&
-                                              event.bannerUrl!.isNotEmpty)
-                                          ? event.bannerUrl!
-                                          : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500',
-                                      width: 60,
-                                      height: 60,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return Container(
-                                              color: Colors.green[500],
-                                              width: 60,
-                                              height: 60,
-                                            );
-                                          },
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Top half: image & category overlay
+                                Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        (event.bannerUrl != null &&
+                                                event.bannerUrl!.isNotEmpty)
+                                            ? event.bannerUrl!
+                                            : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500',
+                                        height: 100,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                              return Container(
+                                                color: Colors.green[100],
+                                                height: 100,
+                                              );
+                                            },
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Details
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          event.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                    Positioned(
+                                      top: 8,
+                                      left: 8,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: theme
+                                              .colorScheme
+                                              .secondaryContainer,
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          event.category,
                                           style: TextStyle(
                                             color: theme.colorScheme.primary,
-                                            fontSize: 14,
+                                            fontSize: 9,
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          event.distance != null
-                                              ? '${event.distance!.toStringAsFixed(1)} km away'
-                                              : event.address,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: Colors.grey[600],
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.people_outline,
-                                              size: 12,
-                                              color: Colors.grey,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              // Same wording as the card
-                                              // carousel above; this row used
-                                              // to state total capacity while
-                                              // the card stated places left.
-                                              spotsLabel(
-                                                volunteersNeeded:
-                                                    event.volunteersNeeded,
-                                                approvedCount:
-                                                    event.approvedCount,
-                                              ),
-                                              style: const TextStyle(
-                                                color: Colors.grey,
-                                                fontSize: 10,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                      ),
                                     ),
+                                  ],
+                                ),
+                                // Bottom details
+                                Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        event.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: theme.colorScheme.primary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.location_on_outlined,
+                                            size: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              event.address,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            spotsLabel(
+                                              volunteersNeeded:
+                                                  event.volunteersNeeded,
+                                              approvedCount:
+                                                  event.approvedCount,
+                                            ),
+                                            style: TextStyle(
+                                              // Red means "hurry". Reserve it for
+                                              // drives that are genuinely nearly
+                                              // full instead of painting every
+                                              // card with an alarm colour.
+                                              color:
+                                                  spotsAreScarce(
+                                                    volunteersNeeded:
+                                                        event.volunteersNeeded,
+                                                    approvedCount:
+                                                        event.approvedCount,
+                                                  )
+                                                  ? const Color(0xFFEF4444)
+                                                  : Colors.grey[600],
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: cta.isApplied
+                                                  ? theme.colorScheme.primary
+                                                        .withValues(alpha: 0.12)
+                                                  : theme.colorScheme.primary,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              cta.label,
+                                              style: TextStyle(
+                                                color: cta.isApplied
+                                                    ? theme.colorScheme.primary
+                                                    : Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                  Icon(
-                                    Icons.arrow_forward_ios,
-                                    size: 12,
-                                    color: Colors.grey[400],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 28),
+
+            // Section Header: Near You
+            Text(
+              'Events Near You',
+              style: GoogleFonts.plusJakartaSans(
+                textStyle: TextStyle(
+                  color: theme.colorScheme.primary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Vertical Near You List
+            events.isEmpty
+                ? Center(
+                    child: Text(
+                      'No events nearby.',
+                      style: TextStyle(color: Colors.grey[500]),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: events.length,
+                    itemBuilder: (context, index) {
+                      final event = events[index];
+
+                      // Simple dynamic left border colors based on indexes
+                      Color leftBorderColor = theme.colorScheme.secondary;
+                      if (index % 3 == 1)
+                        leftBorderColor = const Color(0xFFFD8704);
+                      if (index % 3 == 2)
+                        leftBorderColor = theme.colorScheme.secondaryContainer;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: const Color(0xFFE8EFF1)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: leftBorderColor,
+                                  width: 4,
+                                ),
+                              ),
+                            ),
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        EventDetailScreen(eventId: event.id),
                                   ),
-                                ],
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    // Left image
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        (event.bannerUrl != null &&
+                                                event.bannerUrl!.isNotEmpty)
+                                            ? event.bannerUrl!
+                                            : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500',
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                              return Container(
+                                                color: Colors.green[500],
+                                                width: 60,
+                                                height: 60,
+                                              );
+                                            },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    // Details
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            event.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: theme.colorScheme.primary,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            event.distance != null
+                                                ? '${event.distance!.toStringAsFixed(1)} km away'
+                                                : event.address,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.people_outline,
+                                                size: 12,
+                                                color: Colors.grey,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                // Same wording as the card
+                                                // carousel above; this row used
+                                                // to state total capacity while
+                                                // the card stated places left.
+                                                spotsLabel(
+                                                  volunteersNeeded:
+                                                      event.volunteersNeeded,
+                                                  approvedCount:
+                                                      event.approvedCount,
+                                                ),
+                                                style: const TextStyle(
+                                                  color: Colors.grey,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.arrow_forward_ios,
+                                      size: 12,
+                                      color: Colors.grey[400],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-        ],
+                      );
+                    },
+                  ),
+          ],
+        ),
       ),
     );
   }
@@ -2014,443 +2048,461 @@ class OrganizerDashboardTab extends StatelessWidget {
         ? '${(impactScoreRaw / 1000).toStringAsFixed(1)}k'
         : '$impactScoreRaw';
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Greeting Profile
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                child: Text(
-                  user?.fullName.isNotEmpty == true
-                      ? user!.fullName[0].toUpperCase()
-                      : 'O',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Organizer Portal',
-                    style: TextStyle(color: Colors.grey, fontSize: 11),
-                  ),
-                  Text(
-                    user?.fullName ?? 'NGO Admin',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontSize: 18,
+    return RefreshIndicator(
+      onRefresh: () async {
+        final token = authService.token;
+        if (token == null) return;
+        await Future.wait([
+          eventService.fetchMyEvents(token),
+          eventService.fetchOrganizerApplications(token),
+          authService.fetchMe(),
+        ]);
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Greeting Profile
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  child: Text(
+                    user?.fullName.isNotEmpty == true
+                        ? initialOf(user!.fullName)
+                        : 'O',
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Organizer Portal',
+                      style: TextStyle(color: Colors.grey, fontSize: 11),
+                    ),
+                    Text(
+                      user?.fullName ?? 'NGO Admin',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
 
-          // Stats row
-          Row(
-            children: [
-              // Total Events
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Total Events',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
+            // Stats row
+            Row(
+              children: [
+                // Total Events
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Total Events',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        loading ? '—' : '${events.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 4),
+                        Text(
+                          loading ? '—' : '${events.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Pending Apps
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Pending Apps',
-                        style: TextStyle(
-                          color: Color(0xFF005235),
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$pendingCount',
-                        style: const TextStyle(
-                          color: Color(0xFF005235),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              // Impact Score
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: const Color(0xFFE8EFF1)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Impact Score',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
+                const SizedBox(width: 12),
+                // Pending Apps
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Pending Apps',
+                          style: TextStyle(
+                            color: Color(0xFF005235),
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        impactScore,
-                        style: const TextStyle(
-                          color: Color(0xFF012D1D),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 4),
+                        Text(
+                          '$pendingCount',
+                          style: const TextStyle(
+                            color: Color(0xFF005235),
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
+                const SizedBox(width: 12),
+                // Impact Score
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFE8EFF1)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Impact Score',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          impactScore,
+                          style: const TextStyle(
+                            color: Color(0xFF012D1D),
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
 
-          // Horizontal Quick Links / Action Panel
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildAction(context, Icons.add_box, 'Create Event', () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const CreateEventScreen(),
-                  ),
-                );
-              }),
-              _buildAction(context, Icons.qr_code_scanner, 'Scan QR', () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const QrScannerScreen(),
-                  ),
-                );
-              }),
-              _buildAction(context, Icons.analytics, 'Analytics', () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ImpactAnalyticsScreen(),
-                  ),
-                );
-              }),
-            ],
-          ),
-          const SizedBox(height: 28),
-
-          // Events header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'My Events',
-                style: GoogleFonts.plusJakartaSans(
-                  textStyle: TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.add_circle_outline,
-                  color: Color(0xFF006C48),
-                ),
-                onPressed: () {
+            // Horizontal Quick Links / Action Panel
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildAction(context, Icons.add_box, 'Create Event', () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const CreateEventScreen(),
                     ),
                   );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+                }),
+                _buildAction(context, Icons.qr_code_scanner, 'Scan QR', () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const QrScannerScreen(),
+                    ),
+                  );
+                }),
+                _buildAction(context, Icons.analytics, 'Analytics', () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ImpactAnalyticsScreen(),
+                    ),
+                  );
+                }),
+              ],
+            ),
+            const SizedBox(height: 28),
 
-          // Organizer Events List
-          loading
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 48),
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
+            // Events header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'My Events',
+                  style: GoogleFonts.plusJakartaSans(
+                    textStyle: TextStyle(
+                      color: theme.colorScheme.primary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                )
-              : events.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 40),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.event_note,
-                          size: 48,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No drives published yet.',
-                          style: TextStyle(color: Colors.grey[500]),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Tap + to publish your first drive.',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.add_circle_outline,
+                    color: Color(0xFF006C48),
                   ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: events.length,
-                  itemBuilder: (context, index) {
-                    final event = events[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE8EFF1)),
-                      ),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => VolunteerManagementScreen(
-                                eventId: event.id,
-                                eventTitle: event.title,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ClipRRect(
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(12),
-                                topRight: Radius.circular(12),
-                              ),
-                              child: Image.network(
-                                (event.bannerUrl != null &&
-                                        event.bannerUrl!.isNotEmpty)
-                                    ? event.bannerUrl!
-                                    : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500',
-                                height: 120,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                      color: Colors.green[100],
-                                      height: 120,
-                                    ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          event.title,
-                                          style: TextStyle(
-                                            color: theme.colorScheme.primary,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      Builder(
-                                        builder: (context) {
-                                          final newAppsCount = apps
-                                              .where(
-                                                (app) =>
-                                                    app['eventId'] ==
-                                                        event.id &&
-                                                    app['status'] == 'PENDING',
-                                              )
-                                              .length;
-                                          if (newAppsCount == 0)
-                                            return const SizedBox.shrink();
-                                          return Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: theme
-                                                  .colorScheme
-                                                  .primaryContainer,
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              '$newAppsCount New Apps',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    event.startTime.toString().split(' ')[0],
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Builder(
-                                    builder: (context) {
-                                      final filledCount = apps
-                                          .where(
-                                            (app) =>
-                                                app['eventId'] == event.id &&
-                                                app['status'] == 'APPROVED',
-                                          )
-                                          .length;
-                                      final double fillRatio =
-                                          event.volunteersNeeded > 0
-                                          ? (filledCount /
-                                                event.volunteersNeeded)
-                                          : 0.0;
-                                      return Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                            child: LinearProgressIndicator(
-                                              value: fillRatio.clamp(0.0, 1.0),
-                                              backgroundColor: const Color(
-                                                0xFFE8EFF1,
-                                              ),
-                                              valueColor:
-                                                  const AlwaysStoppedAnimation<
-                                                    Color
-                                                  >(Color(0xFF006C48)),
-                                              minHeight: 6,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                '$filledCount/${event.volunteersNeeded} spots filled',
-                                                style: TextStyle(
-                                                  color: Colors.grey[600],
-                                                  fontSize: 10,
-                                                ),
-                                              ),
-                                              Text(
-                                                'Click to review applications',
-                                                style: TextStyle(
-                                                  color: theme
-                                                      .colorScheme
-                                                      .secondary,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CreateEventScreen(),
                       ),
                     );
                   },
                 ),
-        ],
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Organizer Events List
+            loading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 48),
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    ),
+                  )
+                : events.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.event_note,
+                            size: 48,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No drives published yet.',
+                            style: TextStyle(color: Colors.grey[500]),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Tap + to publish your first drive.',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: events.length,
+                    itemBuilder: (context, index) {
+                      final event = events[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE8EFF1)),
+                        ),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => VolunteerManagementScreen(
+                                  eventId: event.id,
+                                  eventTitle: event.title,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ClipRRect(
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(12),
+                                  topRight: Radius.circular(12),
+                                ),
+                                child: Image.network(
+                                  (event.bannerUrl != null &&
+                                          event.bannerUrl!.isNotEmpty)
+                                      ? event.bannerUrl!
+                                      : 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=500',
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                        color: Colors.green[100],
+                                        height: 120,
+                                      ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            event.title,
+                                            style: TextStyle(
+                                              color: theme.colorScheme.primary,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        Builder(
+                                          builder: (context) {
+                                            final newAppsCount = apps
+                                                .where(
+                                                  (app) =>
+                                                      app['eventId'] ==
+                                                          event.id &&
+                                                      app['status'] ==
+                                                          'PENDING',
+                                                )
+                                                .length;
+                                            if (newAppsCount == 0)
+                                              return const SizedBox.shrink();
+                                            return Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: theme
+                                                    .colorScheme
+                                                    .primaryContainer,
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                              child: Text(
+                                                '$newAppsCount New Apps',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      formatLocalIsoDate(event.startTime),
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Builder(
+                                      builder: (context) {
+                                        final filledCount = apps
+                                            .where(
+                                              (app) =>
+                                                  app['eventId'] == event.id &&
+                                                  app['status'] == 'APPROVED',
+                                            )
+                                            .length;
+                                        final double fillRatio =
+                                            event.volunteersNeeded > 0
+                                            ? (filledCount /
+                                                  event.volunteersNeeded)
+                                            : 0.0;
+                                        return Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              child: LinearProgressIndicator(
+                                                value: fillRatio.clamp(
+                                                  0.0,
+                                                  1.0,
+                                                ),
+                                                backgroundColor: const Color(
+                                                  0xFFE8EFF1,
+                                                ),
+                                                valueColor:
+                                                    const AlwaysStoppedAnimation<
+                                                      Color
+                                                    >(Color(0xFF006C48)),
+                                                minHeight: 6,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '$filledCount/${event.volunteersNeeded} spots filled',
+                                                  style: TextStyle(
+                                                    color: Colors.grey[600],
+                                                    fontSize: 10,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'Click to review applications',
+                                                  style: TextStyle(
+                                                    color: theme
+                                                        .colorScheme
+                                                        .secondary,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ],
+        ),
       ),
     );
   }
@@ -2668,7 +2720,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               backgroundColor:
                                   theme.colorScheme.secondaryContainer,
                               child: Text(
-                                (chat['name'] as String)[0],
+                                initialOf(chat['name'] as String?),
                                 style: TextStyle(
                                   color: theme.colorScheme.primary,
                                   fontWeight: FontWeight.bold,
@@ -2847,7 +2899,7 @@ class VolunteerProfileTab extends StatelessWidget {
                                 profile!.avatarUrl!.isEmpty
                             ? Text(
                                 user?.fullName.isNotEmpty == true
-                                    ? user!.fullName[0].toUpperCase()
+                                    ? initialOf(user!.fullName)
                                     : 'V',
                                 style: TextStyle(
                                   color: theme.colorScheme.primary,
@@ -3359,125 +3411,6 @@ class VolunteerProfileTab extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Earned Badges scrollable row
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Earned Badges',
-              style: GoogleFonts.plusJakartaSans(
-                textStyle: TextStyle(
-                  color: theme.colorScheme.primary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 100,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildBadgeItem(
-                  'Eco Warrior',
-                  Icons.eco,
-                  theme.colorScheme.secondaryContainer,
-                  theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 16),
-                _buildBadgeItem(
-                  'Social Hero',
-                  Icons.groups,
-                  const Color(0xFFFFDCC4),
-                  const Color(0xFFFD8704),
-                ),
-                const SizedBox(width: 16),
-                _buildBadgeItem(
-                  'Care Giver',
-                  Icons.volunteer_activism,
-                  theme.colorScheme.primaryContainer,
-                  Colors.white,
-                ),
-                const SizedBox(width: 16),
-                _buildBadgeItem(
-                  'Tree Planter',
-                  Icons.lock,
-                  Colors.grey[200]!,
-                  Colors.grey,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Recognition Recommendation Card
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFDCC4),
-              borderRadius: BorderRadius.circular(20),
-              border: const Border(
-                left: BorderSide(color: Color(0xFFFD8704), width: 8),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.format_quote,
-                  color: Color(0xFFFD8704),
-                  size: 36,
-                ),
-                const Text(
-                  '"Every drive you complete is logged here and counts towards your certificates and reputation. Thank you for showing up."',
-                  style: TextStyle(
-                    color: Color(0xFF301400),
-                    fontStyle: FontStyle.italic,
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 16,
-                      backgroundColor: const Color(0xFFFD8704).withOpacity(0.2),
-                      child: const Icon(
-                        Icons.person,
-                        color: Color(0xFFFD8704),
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Voluntree Team',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: Color(0xFF301400),
-                          ),
-                        ),
-                        Text(
-                          'Community note',
-                          style: TextStyle(
-                            color: Color(0xFF703800),
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
           // Past Impact Drives List
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3583,42 +3516,6 @@ class VolunteerProfileTab extends StatelessWidget {
                 color: Color(0xFF414844),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBadgeItem(
-    String name,
-    IconData icon,
-    Color bg,
-    Color iconColor,
-  ) {
-    final opacity = icon == Icons.lock ? 0.5 : 1.0;
-    return Opacity(
-      opacity: opacity,
-      child: Container(
-        width: 80,
-        child: Column(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: bg,
-              child: Icon(icon, color: iconColor, size: 24),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF161D1F),
               ),
             ),
           ],

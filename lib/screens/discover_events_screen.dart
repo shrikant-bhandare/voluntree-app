@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import '../services/event_service.dart';
+import '../services/category_service.dart';
 import '../services/auth_service.dart';
 import 'event_detail_screen.dart';
 import '../utils/drive_cta.dart';
 import '../utils/spots_remaining.dart';
 import '../utils/list_state.dart';
+import '../utils/event_time.dart';
 
 class DiscoverEventsScreen extends StatefulWidget {
   final bool isEmbedded;
@@ -33,22 +35,13 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
   double? _userLon;
   bool _locating = false;
 
-  final List<String> _categories = [
-    'All',
-    'Environmental',
-    'Medical',
-    'Education',
-    'Animal Welfare',
-    'Disaster Relief',
-    'Social Awareness',
-  ];
-
   @override
   void initState() {
     super.initState();
     // Load events on screen start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refresh();
+      Provider.of<CategoryService>(context, listen: false).ensureLoaded();
     });
   }
 
@@ -230,51 +223,59 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Category chips (Horizontal scroll)
-                SizedBox(
-                  height: 38,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _categories.length,
-                    itemBuilder: (context, index) {
-                      final cat = _categories[index];
-                      final isSelected = _selectedCategory == cat;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: ChoiceChip(
-                          label: Text(cat),
-                          selected: isSelected,
-                          selectedColor: theme.colorScheme.primary,
-                          backgroundColor: const Color(0xFFF4FAFD),
-                          labelStyle: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : const Color(0xFF717973),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(
-                              color: isSelected
-                                  ? theme.colorScheme.primary
-                                  : const Color(0xFFE8EFF1),
-                              width: 1,
+                // Category chips (Horizontal scroll), from the server's list.
+                Builder(
+                  builder: (context) {
+                    final categories = [
+                      'All',
+                      ...Provider.of<CategoryService>(context).categories,
+                    ];
+                    return SizedBox(
+                      height: 38,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: categories.length,
+                        itemBuilder: (context, index) {
+                          final cat = categories[index];
+                          final isSelected = _selectedCategory == cat;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: ChoiceChip(
+                              label: Text(cat),
+                              selected: isSelected,
+                              selectedColor: theme.colorScheme.primary,
+                              backgroundColor: const Color(0xFFF4FAFD),
+                              labelStyle: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : const Color(0xFF717973),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? theme.colorScheme.primary
+                                      : const Color(0xFFE8EFF1),
+                                  width: 1,
+                                ),
+                              ),
+                              showCheckmark: false,
+                              onSelected: (val) {
+                                if (val) {
+                                  setState(() {
+                                    _selectedCategory = cat;
+                                  });
+                                  _refresh();
+                                }
+                              },
                             ),
-                          ),
-                          showCheckmark: false,
-                          onSelected: (val) {
-                            if (val) {
-                              setState(() {
-                                _selectedCategory = cat;
-                              });
-                              _refresh();
-                            }
-                          },
-                        ),
-                      );
-                    },
-                  ),
+                          );
+                        },
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -589,10 +590,8 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
 
   Widget _buildEventCard(EventModel event) {
     final theme = Theme.of(context);
-    final dateStr =
-        '${event.startTime.day}/${event.startTime.month}/${event.startTime.year}';
-    final timeStr =
-        '${event.startTime.hour.toString().padLeft(2, '0')}:${event.startTime.minute.toString().padLeft(2, '0')}';
+    final dateStr = formatLocalDate(event.startTime);
+    final timeStr = formatLocalTime(event.startTime);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),

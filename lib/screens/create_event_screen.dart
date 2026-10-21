@@ -8,7 +8,9 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
+import '../services/category_service.dart';
 import '../widgets/responsive.dart';
+import '../utils/event_time.dart';
 
 class CreateEventScreen extends StatefulWidget {
   final EventModel? eventToEdit;
@@ -29,12 +31,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   late final TextEditingController _latitudeController;
   late final TextEditingController _longitudeController;
 
-  String _category = 'Environmental';
+  /// Null until chosen; must be one of `GET /events/categories`.
+  String? _category;
   bool _isOnline = false;
   bool _isPaid = false;
   DateTime _startDate = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 17, minute: 0);
+  int _endDayOffset = 0;
   String? _bannerUrl;
   List<String> _openPositions = [];
   List<String> _perks = [];
@@ -45,6 +49,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<CategoryService>(context, listen: false).ensureLoaded();
+      }
+    });
     final e = widget.eventToEdit;
     _bannerUrl = e?.bannerUrl;
     _titleController = TextEditingController(text: e?.title ?? '');
@@ -73,9 +82,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       _category = e.category;
       _isOnline = e.isOnline;
       _isPaid = e.isPaid;
-      _startDate = e.startTime;
-      _startTime = TimeOfDay.fromDateTime(e.startTime);
-      _endTime = TimeOfDay.fromDateTime(e.endTime);
+      // Local wall-clock prefill; [_submit] converts back to UTC, so saving
+      // an unchanged drive sends the same instants it received.
+      final times = EventFormTimes.fromEvent(e.startTime, e.endTime);
+      _startDate = times.date;
+      _startTime = times.start;
+      _endTime = times.end;
+      _endDayOffset = times.endDayOffset;
     }
   }
 
@@ -96,7 +109,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _startDate,
-      firstDate: DateTime.now(),
+      // An existing drive may already have started; never assert on it.
+      firstDate: _startDate.isBefore(DateTime.now())
+          ? _startDate
+          : DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (picked != null && picked != _startDate) {
@@ -183,9 +199,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error getting location: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Could not get your location. Check that location access is allowed.',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isGettingLocation = false);
@@ -908,6 +928,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final category = Provider.of<CategoryService>(
+      context,
+      listen: false,
+    ).canonical(_category);
+    if (category == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a category for this drive.')),
+      );
+      return;
+    }
 
     final auth = Provider.of<AuthService>(context, listen: false);
     final eventService = Provider.of<EventService>(context, listen: false);
@@ -923,21 +953,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       _isSaving = true;
     });
 
-    final startDateTime = DateTime(
-      _startDate.year,
-      _startDate.month,
-      _startDate.day,
-      _startTime.hour,
-      _startTime.minute,
+    final formTimes = EventFormTimes(
+      date: _startDate,
+      start: _startTime,
+      end: _endTime,
+      endDayOffset: _endDayOffset,
     );
-
-    final endDateTime = DateTime(
-      _startDate.year,
-      _startDate.month,
-      _startDate.day,
-      _endTime.hour,
-      _endTime.minute,
-    );
+    final startDateTime = formTimes.startDateTime;
+    final endDateTime = formTimes.endDateTime;
 
     final lat = !_isOnline
         ? double.tryParse(_latitudeController.text.trim())
@@ -952,7 +975,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             eventId: widget.eventToEdit!.id,
             title: _titleController.text.trim(),
             description: _descriptionController.text.trim(),
-            category: _category,
+            category: category,
             bannerUrl: _bannerUrl,
             address: _addressController.text.trim(),
             latitude: lat,
@@ -973,7 +996,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             token: auth.token!,
             title: _titleController.text.trim(),
             description: _descriptionController.text.trim(),
-            category: _category,
+            category: category,
             bannerUrl: _bannerUrl,
             address: _addressController.text.trim(),
             latitude: lat,
@@ -1008,6 +1031,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         );
         // Refresh event list for dashboard
         eventService.fetchEvents();
+        // The dashboard reads /events/mine; without this a new drive stayed
+        // invisible there until an unrelated refresh.
+        eventService.fetchMyEvents(auth.token!);
+        eventService.fetchOrganizerApplications(auth.token!);
 
         if (Navigator.canPop(context)) {
           Navigator.of(context).pop(true);
@@ -1023,7 +1050,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
           _compensationController.clear();
           setState(() {
             _bannerUrl = null;
-            _category = 'Environmental';
+            _category = null;
             _isOnline = false;
             _isPaid = false;
             _startDate = DateTime.now().add(const Duration(days: 1));
@@ -1206,32 +1233,61 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE8EFF1)),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _category,
-                            isExpanded: true,
-                            items:
-                                <String>[
-                                  'Environmental',
-                                  'Medical',
-                                  'Education',
-                                  'Animal Welfare',
-                                  'Disaster Relief',
-                                  'Social Awareness',
-                                ].map<DropdownMenuItem<String>>((String value) {
-                                  return DropdownMenuItem<String>(
-                                    value: value,
-                                    child: Text(value),
-                                  );
-                                }).toList(),
-                            onChanged: (String? value) {
-                              if (value != null) {
-                                setState(() {
-                                  _category = value;
-                                });
-                              }
-                            },
-                          ),
+                        child: Consumer<CategoryService>(
+                          builder: (context, categoryService, _) {
+                            final categories = categoryService.categories;
+                            if (categories.isEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                child: categoryService.loadFailed
+                                    ? Row(
+                                        children: [
+                                          const Expanded(
+                                            child: Text(
+                                              'Could not load categories.',
+                                            ),
+                                          ),
+                                          TextButton(
+                                            onPressed:
+                                                categoryService.ensureLoaded,
+                                            child: const Text('Retry'),
+                                          ),
+                                        ],
+                                      )
+                                    : const LinearProgressIndicator(),
+                              );
+                            }
+                            // An older drive may carry a retired category;
+                            // the organizer must pick a current one.
+                            final selected = categoryService.canonical(
+                              _category,
+                            );
+                            return DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: selected,
+                                hint: const Text('Choose a category'),
+                                isExpanded: true,
+                                items: categories
+                                    .map<DropdownMenuItem<String>>(
+                                      (String value) =>
+                                          DropdownMenuItem<String>(
+                                            value: value,
+                                            child: Text(value),
+                                          ),
+                                    )
+                                    .toList(),
+                                onChanged: (String? value) {
+                                  if (value != null) {
+                                    setState(() {
+                                      _category = value;
+                                    });
+                                  }
+                                },
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -1841,7 +1897,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 8.0),
                                 child: Text(
-                                  'No custom positions added yet. Default campaign roles will be used.',
+                                  'No positions added. Volunteers apply to the drive without picking a role.',
                                   style: TextStyle(
                                     color: Colors.grey,
                                     fontSize: 12,
@@ -1931,7 +1987,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 8.0),
                                 child: Text(
-                                  'No custom perks added yet. Default perks will be shown.',
+                                  'No perks added. Volunteers will not see a perks section.',
                                   style: TextStyle(
                                     color: Colors.grey,
                                     fontSize: 12,

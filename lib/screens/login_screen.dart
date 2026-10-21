@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/sso_service.dart';
+import '../utils/policy_links.dart';
 import 'otp_screen.dart';
 import 'register_screen.dart';
 
@@ -16,9 +17,13 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _identifierController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  late final PolicyLinkRecognizers _links = PolicyLinkRecognizers(
+    () => context,
+  );
 
   @override
   void dispose() {
+    _links.dispose();
     _identifierController.dispose();
     super.dispose();
   }
@@ -41,16 +46,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (mounted) {
       if (result['success']) {
-        // otpInDev is only ever present outside production; in a real build
-        // the code arrives by email or SMS and nothing is shown here.
-        final devOtp = result['otpInDev'];
+        // A dev code is shown only for a local API; in a real build the code
+        // arrives by email or SMS and nothing is shown here.
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              devOtp != null
-                  ? '${result['message']} (dev code: $devOtp)'
-                  : result['message'],
-            ),
+            content: Text(otpSentMessage(result)),
             backgroundColor: const Color(
               0xFF0E6C4A,
             ), // Voluntree Secondary Green
@@ -443,10 +443,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       height: 1.5,
                     ),
                     children: [
-                      const TextSpan(text: 'By joining, you agree to our '),
+                      const TextSpan(text: 'By continuing, you agree to our '),
                       TextSpan(
                         text: 'Terms of Service',
+                        recognizer: _links.terms,
                         style: TextStyle(
+                          decoration: TextDecoration.underline,
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
@@ -454,7 +456,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       const TextSpan(text: ' and '),
                       TextSpan(
                         text: 'Privacy Policy',
+                        recognizer: _links.privacy,
                         style: TextStyle(
+                          decoration: TextDecoration.underline,
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),

@@ -6,6 +6,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/attendance_service.dart';
 import '../widgets/responsive.dart';
+import '../widgets/pass_code_display.dart';
+import '../utils/event_time.dart';
+import '../utils/text_utils.dart';
 
 class QrPassScreen extends StatefulWidget {
   final String applicationId;
@@ -93,7 +96,8 @@ class _QrPassScreenState extends State<QrPassScreen> {
       ),
       body: ResponsiveCenter(
         maxWidth: 560,
-        child: isLoading
+        // Keep showing a still-valid pass while it refreshes.
+        child: isLoading && pass == null
             ? const Center(child: CircularProgressIndicator())
             : pass == null
             ? Center(
@@ -216,11 +220,10 @@ class _QrPassScreenState extends State<QrPassScreen> {
                                   topLeft: Radius.circular(24),
                                   topRight: Radius.circular(24),
                                 ),
-                                child: Image.network(
-                                  'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=600',
+                                child: Container(
                                   height: 110,
                                   width: double.infinity,
-                                  fit: BoxFit.cover,
+                                  color: theme.colorScheme.primaryContainer,
                                 ),
                               ),
                               Positioned(
@@ -404,11 +407,16 @@ class _QrPassScreenState extends State<QrPassScreen> {
                                 const SizedBox(height: 12),
                                 const Text(
                                   'Show this code to the organizer to check in and out',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    color: Color(0xFF717973),
-                                    fontSize: 11,
+                                    color: Color(0xFF414844),
+                                    fontSize: 12,
                                   ),
                                 ),
+                                if (pass.passCode != null) ...[
+                                  const SizedBox(height: 16),
+                                  PassCodeDisplay(code: pass.passCode!),
+                                ],
                               ],
                             ),
                           ),
@@ -433,9 +441,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
                                   backgroundColor:
                                       theme.colorScheme.primaryContainer,
                                   child: Text(
-                                    user?.fullName.isNotEmpty == true
-                                        ? user!.fullName[0].toUpperCase()
-                                        : 'V',
+                                    initialOf(user?.fullName, fallback: 'V'),
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
@@ -457,7 +463,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
                                         ),
                                       ),
                                       Text(
-                                        user?.fullName ?? 'Alex Chen',
+                                        user?.fullName ?? '',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 13,
@@ -470,22 +476,24 @@ class _QrPassScreenState extends State<QrPassScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    const Text(
-                                      'TICKET ID',
-                                      style: TextStyle(
-                                        color: Colors.white60,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
+                                    if (pass.expiresAt != null) ...[
+                                      const Text(
+                                        'VALID UNTIL',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
-                                    ),
-                                    Text(
-                                      '#VT-${widget.applicationId.substring(0, 4).toUpperCase()}-GC',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
+                                      Text(
+                                        formatLocalTime(pass.expiresAt!),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ],
@@ -529,7 +537,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
-                        '"Please arrive early and show this pass at the entrance. The code refreshes automatically — keep the app open until you have checked out."',
+                        'Open this pass when you arrive and again when you leave. It renews itself while this screen is open, so you can close the app in between.',
                         style: TextStyle(
                           color: Color(0xFF414844),
                           fontStyle: FontStyle.italic,

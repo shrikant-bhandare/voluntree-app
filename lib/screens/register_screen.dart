@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../widgets/responsive.dart';
+import '../widgets/date_of_birth_field.dart';
+import '../utils/policy_links.dart';
+import 'otp_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -15,9 +18,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  DateTime? _dateOfBirth;
+  bool _acceptedTerms = false;
+  String? _dobError;
+  String? _termsError;
+  late final PolicyLinkRecognizers _links = PolicyLinkRecognizers(
+    () => context,
+  );
 
   @override
   void dispose() {
+    _links.dispose();
     _fullNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
@@ -25,26 +36,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _register() async {
-    if (!_formKey.currentState!.validate()) return;
+    final formOk = _formKey.currentState!.validate();
+    setState(() {
+      _dobError = _dateOfBirth == null
+          ? 'Please add your date of birth.'
+          : null;
+      _termsError = _acceptedTerms
+          ? null
+          : 'Please accept the Terms of Service and Privacy Policy to continue.';
+    });
+    if (!formOk || _dobError != null || _termsError != null) return;
 
     final authService = Provider.of<AuthService>(context, listen: false);
+    final email = _emailController.text.trim();
     final result = await authService.register(
       fullName: _fullNameController.text.trim(),
-      email: _emailController.text.trim(),
+      email: email,
       phoneNumber: _phoneController.text.trim(),
+      dateOfBirth: _dateOfBirth!,
+      acceptTerms: _acceptedTerms,
     );
 
     if (mounted) {
       if (result['success']) {
+        // Straight to the code screen with the address filled in and a code
+        // already on its way — retyping it on the login screen lost people.
+        final otp = await authService.requestOtp(email: email);
+        if (!mounted) return;
+        final sent = otp['success'] == true;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'User registered successfully. Please login with OTP now.',
+              sent
+                  ? 'Account created. ${otpSentMessage(otp)}'
+                  : 'Account created. ${otp['message'] ?? 'Request a code to sign in.'}',
             ),
-            backgroundColor: Color(0xFF0E6C4A), // Voluntree Secondary Green
+            backgroundColor: const Color(0xFF0E6C4A),
+            duration: const Duration(seconds: 6),
           ),
         );
-        Navigator.of(context).pop(); // Go back to login
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => OtpScreen(email: email, codeJustSent: sent),
+          ),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -319,7 +354,88 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 16),
+
+                        DateOfBirthField(
+                          value: _dateOfBirth,
+                          errorText: _dobError,
+                          onChanged: (d) => setState(() {
+                            _dateOfBirth = d;
+                            _dobError = null;
+                          }),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'You must be at least 16 to join. Drives may set a higher minimum age.',
+                          style: TextStyle(
+                            color: Color(0xFF414844),
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Consent: required, with live links to both documents.
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Checkbox(
+                              value: _acceptedTerms,
+                              activeColor: theme.colorScheme.primary,
+                              onChanged: (v) => setState(() {
+                                _acceptedTerms = v ?? false;
+                                if (_acceptedTerms) _termsError = null;
+                              }),
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Text.rich(
+                                  TextSpan(
+                                    style: const TextStyle(
+                                      color: Color(0xFF414844),
+                                      fontSize: 13,
+                                      height: 1.4,
+                                    ),
+                                    children: [
+                                      const TextSpan(text: 'I agree to the '),
+                                      TextSpan(
+                                        text: 'Terms of Service',
+                                        recognizer: _links.terms,
+                                        style: TextStyle(
+                                          color: theme.colorScheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                      const TextSpan(text: ' and '),
+                                      TextSpan(
+                                        text: 'Privacy Policy',
+                                        recognizer: _links.privacy,
+                                        style: TextStyle(
+                                          color: theme.colorScheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_termsError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 12, top: 4),
+                            child: Text(
+                              _termsError!,
+                              style: TextStyle(
+                                color: theme.colorScheme.error,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 24),
 
                         ElevatedButton(
                           onPressed: isLoading ? null : _register,
@@ -361,36 +477,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // sign-in lives on the login screen where it is wired up.
                 const SizedBox(height: 24),
 
-                // Terms & Privacy footer
-                RichText(
-                  textAlign: TextAlign.center,
-                  text: TextSpan(
-                    style: const TextStyle(
-                      color: Color(0xFF57606A),
-                      fontSize: 12,
-                      height: 1.5,
-                    ),
-                    children: [
-                      const TextSpan(text: 'By joining, you agree to our '),
-                      TextSpan(
-                        text: 'Terms of Service',
-                        style: TextStyle(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const TextSpan(text: ' and '),
-                      TextSpan(
-                        text: 'Privacy Policy',
-                        style: TextStyle(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const TextSpan(text: '.'),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 24),
               ],
             ),

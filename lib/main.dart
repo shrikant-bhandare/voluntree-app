@@ -12,6 +12,7 @@ import 'services/notification_service.dart';
 import 'services/report_service.dart';
 import 'services/payments_service.dart';
 import 'services/posts_service.dart';
+import 'services/category_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -61,6 +62,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ReportService()),
         ChangeNotifierProvider(create: (_) => PaymentsService()),
         ChangeNotifierProvider(create: (_) => PostsService()),
+        ChangeNotifierProvider(create: (_) => CategoryService()),
       ],
       child: const MyApp(),
     ),

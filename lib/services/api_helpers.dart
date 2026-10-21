@@ -6,6 +6,8 @@
 /// every list screen simply looked empty against a healthy API.
 library;
 
+import 'dart:convert';
+
 /// Accepts both the paginated `{data: [...]}` envelope and a bare array, so
 /// the client keeps working against either backend generation.
 List<dynamic> unwrapList(dynamic decoded) {
@@ -40,10 +42,35 @@ String apiMessage(dynamic decoded, String fallback) {
 /// Parses a server timestamp defensively. Model fromJson runs inside
 /// `.map(...).toList()` under a catch-all, so one malformed or missing date
 /// must not silently discard the whole page.
+///
+/// The API sends UTC (`...Z`). The result is always converted to the device's
+/// local zone: screens read `.hour`/`.day` straight off these values, and a
+/// UTC DateTime made a 09:00 IST drive read "03:30".
 DateTime parseServerDate(dynamic value, {DateTime? fallback}) {
+  return parseServerDateOrNull(value) ?? fallback ?? DateTime.now();
+}
+
+/// Like [parseServerDate] but returns null for a missing or malformed value.
+DateTime? parseServerDateOrNull(dynamic value) {
+  if (value is DateTime) return value.toLocal();
   if (value is String) {
     final parsed = DateTime.tryParse(value);
-    if (parsed != null) return parsed;
+    if (parsed != null) return parsed.toLocal();
   }
-  return fallback ?? DateTime.now();
+  return null;
+}
+
+/// Maps a thrown exception (no connectivity, DNS failure, malformed body) to
+/// copy a person can act on. Raw `ClientException with SocketException...`
+/// strings must never reach a SnackBar.
+String friendlyNetworkError([Object? error]) =>
+    'You appear to be offline. Check your connection and try again.';
+
+/// Best-effort decode of an error body; returns null when it is not JSON.
+dynamic tryDecodeJson(String body) {
+  try {
+    return jsonDecode(body);
+  } catch (_) {
+    return null;
+  }
 }

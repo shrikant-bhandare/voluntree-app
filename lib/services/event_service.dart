@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import 'api_helpers.dart';
+import '../utils/event_time.dart';
 
 class EventModel {
   final String id;
@@ -278,8 +279,8 @@ class EventService extends ChangeNotifier {
           'isOnline': isOnline,
           // Explicit UTC: a local DateTime serialises without a zone suffix
           // and the server would store the wall-clock time as UTC.
-          'startTime': startTime.toUtc().toIso8601String(),
-          'endTime': endTime.toUtc().toIso8601String(),
+          'startTime': toApiTimestamp(startTime),
+          'endTime': toApiTimestamp(endTime),
           'volunteersNeeded': volunteersNeeded,
           'minAge': minAge,
           'isPaid': isPaid,
@@ -305,7 +306,7 @@ class EventService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -348,7 +349,7 @@ class EventService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -421,7 +422,7 @@ class EventService extends ChangeNotifier {
         };
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -531,8 +532,8 @@ class EventService extends ChangeNotifier {
           'isOnline': isOnline,
           // Explicit UTC: a local DateTime serialises without a zone suffix
           // and the server would store the wall-clock time as UTC.
-          'startTime': startTime.toUtc().toIso8601String(),
-          'endTime': endTime.toUtc().toIso8601String(),
+          'startTime': toApiTimestamp(startTime),
+          'endTime': toApiTimestamp(endTime),
           'volunteersNeeded': volunteersNeeded,
           'minAge': minAge,
           'isPaid': isPaid,
@@ -562,7 +563,37 @@ class EventService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
+    }
+  }
+
+  /// `PATCH /events/:id/status`. Organizers use it to cancel a drive
+  /// (`CANCELLED`); the server notifies every pending and approved applicant
+  /// and refuses transitions it does not allow with a readable 400.
+  Future<Map<String, dynamic>> updateEventStatus(
+    String token,
+    String eventId,
+    String status,
+  ) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('$baseUrl/events/$eventId/status'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'status': status}),
+      );
+      final data = tryDecodeJson(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'event': data};
+      }
+      return {
+        'success': false,
+        'message': apiMessage(data, 'Could not update the drive.'),
+      };
+    } catch (e) {
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -579,19 +610,21 @@ class EventService extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 204) {
         return {'success': true};
       } else {
-        final data = jsonDecode(response.body);
         return {
           'success': false,
-          'message': apiMessage(data, 'Failed to delete event'),
+          'message': apiMessage(
+            tryDecodeJson(response.body),
+            'Failed to delete event',
+          ),
         };
       }
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 

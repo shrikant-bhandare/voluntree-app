@@ -84,7 +84,7 @@ class PaymentsService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network error: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -120,7 +120,7 @@ class PaymentsService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network error: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -152,7 +152,7 @@ class PaymentsService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network error: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 

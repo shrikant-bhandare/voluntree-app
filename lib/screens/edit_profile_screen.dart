@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart'
 import '../config.dart';
 import '../services/auth_service.dart';
 import '../widgets/responsive.dart';
+import '../widgets/date_of_birth_field.dart';
+import '../services/category_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -26,8 +28,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _socialGithubController = TextEditingController();
   final _socialLinkedinController = TextEditingController();
   final _skillsController = TextEditingController();
-  final _interestsController = TextEditingController();
   final _availabilityController = TextEditingController();
+
+  /// Chosen from `GET /events/categories` — free text never matched the
+  /// server's categories, so recommendations silently stayed empty.
+  final Set<String> _interests = {};
+  DateTime? _dateOfBirth;
   String _experienceLevel = 'BEGINNER';
   String? _avatarUrl;
   bool _isUploadingAvatar = false;
@@ -38,6 +44,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // Pre-populate with existing values
     final user = Provider.of<AuthService>(context, listen: false).currentUser;
     final profile = user?.profile;
+    _dateOfBirth = user?.dateOfBirth;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<CategoryService>(context, listen: false).ensureLoaded();
+      }
+    });
     if (profile != null) {
       _bioController.text = profile.bio ?? '';
       _locationController.text = profile.location ?? '';
@@ -47,7 +59,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _socialGithubController.text = profile.socialGithub ?? '';
       _socialLinkedinController.text = profile.socialLinkedin ?? '';
       _skillsController.text = profile.skills.join(', ');
-      _interestsController.text = profile.interests.join(', ');
+      _interests.addAll(profile.interests);
       _availabilityController.text = profile.availability.join(', ');
       _experienceLevel = profile.experienceLevel;
       _avatarUrl = profile.avatarUrl;
@@ -64,7 +76,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _socialGithubController.dispose();
     _socialLinkedinController.dispose();
     _skillsController.dispose();
-    _interestsController.dispose();
     _availabilityController.dispose();
     super.dispose();
   }
@@ -80,11 +91,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         .where((s) => s.isNotEmpty)
         .toList();
 
-    final interestsList = _interestsController.text
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
+    // Only categories the server knows (canonical spelling); legacy free-text
+    // interests would be rejected.
+    final categoryService = Provider.of<CategoryService>(
+      context,
+      listen: false,
+    );
+    final interestsList = categoryService.hasLoaded
+        ? (_interests
+              .map(categoryService.canonical)
+              .whereType<String>()
+              .toSet()
+              .toList())
+        : null;
 
     final availabilityList = _availabilityController.text
         .split(',')
@@ -105,6 +124,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       avatarUrl: _avatarUrl,
       experienceLevel: _experienceLevel,
       availability: availabilityList,
+      dateOfBirth: _dateOfBirth,
     );
 
     if (mounted) {
@@ -402,10 +422,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     // Location & Occupation
                     _buildSectionHeader('Personal Details'),
                     const SizedBox(height: 8),
+                    DateOfBirthField(
+                      value: _dateOfBirth,
+                      onChanged: (d) => setState(() => _dateOfBirth = d),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4, left: 4),
+                      child: Text(
+                        'Needed to apply to drives, which have minimum ages. Not shown on your profile.',
+                        style: TextStyle(
+                          color: Color(0xFF414844),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _locationController,
                       decoration: _buildInputDecoration(
-                        'Location (e.g. San Francisco, CA)',
+                        'Location (e.g. Pune, Maharashtra)',
                         Icons.location_on_outlined,
                         theme,
                       ),
@@ -415,7 +450,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     TextFormField(
                       controller: _educationOrJobController,
                       decoration: _buildInputDecoration(
-                        'Education or Occupation (e.g. Student at Stanford)',
+                        'Education or Occupation (e.g. College student, Nurse)',
                         Icons.work_outline,
                         theme,
                       ),
@@ -436,14 +471,61 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       style: const TextStyle(fontSize: 14),
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _interestsController,
-                      decoration: _buildInputDecoration(
-                        'Interests (comma-separated, e.g. environment, health)',
-                        Icons.favorite_border,
-                        theme,
+                    const Text(
+                      'Interests',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF012D1D),
                       ),
-                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Pick the causes you care about. Recommendations use these.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF414844)),
+                    ),
+                    const SizedBox(height: 8),
+                    Consumer<CategoryService>(
+                      builder: (context, categoryService, _) {
+                        if (!categoryService.hasLoaded) {
+                          return categoryService.loadFailed
+                              ? Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text('Could not load interests.'),
+                                    ),
+                                    TextButton(
+                                      onPressed: categoryService.ensureLoaded,
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                )
+                              : const LinearProgressIndicator();
+                        }
+                        final chosen = _interests
+                            .map(categoryService.canonical)
+                            .whereType<String>()
+                            .toSet();
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final c in categoryService.categories)
+                              FilterChip(
+                                label: Text(c),
+                                selected: chosen.contains(c),
+                                selectedColor: const Color(0xFFA0F4C8),
+                                checkmarkColor: const Color(0xFF012D1D),
+                                onSelected: (on) => setState(() {
+                                  _interests.removeWhere(
+                                    (i) => i.toLowerCase() == c.toLowerCase(),
+                                  );
+                                  if (on) _interests.add(c);
+                                }),
+                              ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
                     TextFormField(

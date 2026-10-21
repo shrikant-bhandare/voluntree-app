@@ -163,7 +163,7 @@ class PostsService extends ChangeNotifier {
         };
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network failure: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 

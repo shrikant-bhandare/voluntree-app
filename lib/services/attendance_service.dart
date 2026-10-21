@@ -7,6 +7,10 @@ import 'api_helpers.dart';
 
 class PassDetails {
   final String passToken;
+
+  /// Short manual check-in code (`XXXX-XXXX`), valid for the same window as
+  /// the QR token. Read aloud when the organizer cannot scan (web build).
+  final String? passCode;
   final String eventTitle;
   final DateTime startTime;
   final String address;
@@ -16,6 +20,7 @@ class PassDetails {
 
   PassDetails({
     required this.passToken,
+    this.passCode,
     required this.eventTitle,
     required this.startTime,
     required this.address,
@@ -25,15 +30,28 @@ class PassDetails {
   factory PassDetails.fromJson(Map<String, dynamic> json) {
     return PassDetails(
       passToken: json['passToken'] ?? '',
+      passCode: formatPassCode(json['passCode']),
       eventTitle: json['eventTitle'] ?? '',
       startTime: parseServerDate(json['startTime']),
       address: json['address'] ?? '',
-      expiresAt: json['expiresAt'] is String
-          ? DateTime.tryParse(json['expiresAt'])
-          : null,
+      expiresAt: parseServerDateOrNull(json['expiresAt']),
     );
   }
 }
+
+/// Normalises a pass code to `XXXX-XXXX` (upper case, hyphen in the middle).
+/// Returns null when there is no usable code.
+String? formatPassCode(dynamic raw) {
+  if (raw is! String) return null;
+  final compact = normalizePassCode(raw);
+  if (compact.isEmpty) return null;
+  if (compact.length != 8) return compact;
+  return '${compact.substring(0, 4)}-${compact.substring(4)}';
+}
+
+/// Strips spaces/hyphens and upper-cases, as the server accepts either form.
+String normalizePassCode(String raw) =>
+    raw.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
 
 class CompletedDrive {
   final String id;
@@ -59,9 +77,7 @@ class CompletedDrive {
       id: json['id'] ?? '',
       eventId: json['eventId'] ?? '',
       checkIn: parseServerDate(json['checkIn']),
-      checkOut: json['checkOut'] != null
-          ? DateTime.tryParse(json['checkOut'].toString())
-          : null,
+      checkOut: parseServerDateOrNull(json['checkOut']),
       hoursLogged: (json['hoursLogged'] ?? 0.0).toDouble(),
       eventTitle: json['event']?['title'] ?? '',
       eventCategory: json['event']?['category'] ?? '',
@@ -74,6 +90,7 @@ class AttendanceService extends ChangeNotifier {
 
   bool _isLoading = false;
   PassDetails? _activePass;
+  String? _activePassApplicationId;
   List<CompletedDrive> _history = [];
 
   bool get isLoading => _isLoading;
@@ -82,6 +99,7 @@ class AttendanceService extends ChangeNotifier {
 
   void clear() {
     _activePass = null;
+    _activePassApplicationId = null;
     _history = [];
     _isLoading = false;
     notifyListeners();
@@ -92,7 +110,11 @@ class AttendanceService extends ChangeNotifier {
     String applicationId,
   ) async {
     _isLoading = true;
-    _activePass = null;
+    // Keep a still-valid pass for the same application while refreshing, so
+    // a network blip at the venue does not wipe the code off the screen.
+    if (_activePassApplicationId != applicationId) {
+      _activePass = null;
+    }
     notifyListeners();
 
     try {
@@ -107,6 +129,7 @@ class AttendanceService extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         _activePass = PassDetails.fromJson(data);
+        _activePassApplicationId = applicationId;
         notifyListeners();
         return {'success': true};
       } else {
@@ -118,7 +141,7 @@ class AttendanceService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -161,7 +184,52 @@ class AttendanceService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
+    }
+  }
+
+  /// Manual check-in/out: the organizer picks one of their drives and types
+  /// the volunteer's 8-character pass code (`POST /attendance/scan`
+  /// with `{eventId, passCode}`). Same response shape as a QR scan.
+  Future<Map<String, dynamic>> verifyPassCode(
+    String token, {
+    required String eventId,
+    required String passCode,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/attendance/scan'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'eventId': eventId,
+          'passCode': formatPassCode(passCode) ?? passCode,
+        }),
+      );
+      final data = tryDecodeJson(response.body);
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return {
+          'success': true,
+          'type': data?['type'],
+          'message': data?['message'],
+          'time': data?['time'],
+          'hoursLogged': data?['hoursLogged'],
+          'pointsAwarded': data?['pointsAwarded'],
+        };
+      }
+      return {
+        'success': false,
+        'message': apiMessage(data, 'That pass code was not accepted.'),
+      };
+    } catch (e) {
+      return {'success': false, 'message': friendlyNetworkError(e)};
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

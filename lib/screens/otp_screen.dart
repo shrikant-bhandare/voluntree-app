@@ -1,13 +1,42 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../config.dart';
 import '../services/auth_service.dart';
 import '../widgets/responsive.dart';
+import 'register_screen.dart';
+
+/// Seconds before another code may be requested from the OTP screen.
+const int otpResendCooldownSeconds = 60;
+
+/// Confirmation copy after a code was requested. The dev code is appended
+/// only when the API runs locally — never against a hosted API.
+String otpSentMessage(Map<String, dynamic> result) {
+  final message = (result['message'] as String?)?.trim();
+  final base = (message == null || message.isEmpty)
+      ? 'We sent you a sign-in code.'
+      : message;
+  final devOtp = result['otpInDev'];
+  if (devOtp != null && AppConfig.isLocalApi) {
+    return '$base (dev code: $devOtp)';
+  }
+  return base;
+}
 
 class OtpScreen extends StatefulWidget {
   final String? email;
   final String? phoneNumber;
 
-  const OtpScreen({super.key, this.email, this.phoneNumber});
+  /// Whether a code was just sent (starts the resend cooldown). False when
+  /// the request failed, so "Resend code" is available straight away.
+  final bool codeJustSent;
+
+  const OtpScreen({
+    super.key,
+    this.email,
+    this.phoneNumber,
+    this.codeJustSent = true,
+  });
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -16,11 +45,63 @@ class OtpScreen extends StatefulWidget {
 class _OtpScreenState extends State<OtpScreen> {
   final _codeController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  Timer? _cooldownTimer;
+  int _secondsLeft = 0;
+  bool _resending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.codeJustSent) _startCooldown();
+  }
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _codeController.dispose();
     super.dispose();
+  }
+
+  void _startCooldown() {
+    _cooldownTimer?.cancel();
+    setState(() => _secondsLeft = otpResendCooldownSeconds);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _secondsLeft--);
+      if (_secondsLeft <= 0) timer.cancel();
+    });
+  }
+
+  Future<void> _resend() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _resending = true);
+    final result = await authService.requestOtp(
+      email: widget.email,
+      phoneNumber: widget.phoneNumber,
+    );
+    if (!mounted) return;
+    setState(() => _resending = false);
+    if (result['success'] == true) {
+      _startCooldown();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(otpSentMessage(result)),
+          backgroundColor: const Color(0xFF0E6C4A),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Could not send a new code.'),
+          backgroundColor: const Color(0xFFBA1A1A),
+        ),
+      );
+    }
   }
 
   void _verify() async {
@@ -228,17 +309,42 @@ class _OtpScreenState extends State<OtpScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text(
-                    'Change Contact / Resend OTP',
-                    style: TextStyle(
-                      color: Color(0xFF717973),
-                      decoration: TextDecoration.underline,
-                      fontWeight: FontWeight.w500,
+                Center(
+                  child: TextButton(
+                    onPressed: (_secondsLeft > 0 || _resending)
+                        ? null
+                        : _resend,
+                    child: Text(
+                      _resending
+                          ? 'Sending…'
+                          : _secondsLeft > 0
+                          ? 'Resend code in ${_secondsLeft}s'
+                          : 'Resend code',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "Didn't get it? Check your spam folder and that the address is right.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF414844), fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Use a different email or phone'),
+                  ),
+                ),
+                Center(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterScreen(),
+                      ),
+                    ),
+                    child: const Text('New here? Create an account'),
                   ),
                 ),
               ],

@@ -14,6 +14,21 @@ class AppConfig {
   /// a guarantee the app does not make.
   static const bool enableE2EE = false;
 
+  /// Payments are not integrated with a gateway yet (the API answers 503).
+  /// Every donate/subscribe/promote entry point stays hidden unless a build
+  /// passes `--dart-define=PAYMENTS_ENABLED=true`.
+  static const bool paymentsEnabled = bool.fromEnvironment(
+    'PAYMENTS_ENABLED',
+    defaultValue: false,
+  );
+
+  /// Hosted legal documents, supplied per build:
+  ///   --dart-define=TERMS_URL=https://... --dart-define=PRIVACY_URL=https://...
+  /// Empty means "not published yet"; the links then explain that instead of
+  /// doing nothing.
+  static const String termsUrl = String.fromEnvironment('TERMS_URL');
+  static const String privacyUrl = String.fromEnvironment('PRIVACY_URL');
+
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
@@ -39,6 +54,17 @@ class AppConfig {
       return _androidDevFallback;
     }
     return _defaultDevFallback;
+  }
+
+  /// True when the API is a local development server. A dev OTP returned by
+  /// the API (`otpInDev`) is only ever displayed in that case.
+  static bool get isLocalApi {
+    final host = Uri.tryParse(baseUrl)?.host ?? '';
+    return host == 'localhost' ||
+        host == '127.0.0.1' ||
+        host == '10.0.2.2' ||
+        host == '[::1]' ||
+        host == '::1';
   }
 
   /// True when talking to the API over plaintext HTTP. Release builds must not.

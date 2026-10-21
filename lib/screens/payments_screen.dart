@@ -194,36 +194,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           ),
           const SizedBox(height: 10),
           _CustomDonateInput(auth: auth, payments: payments),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: const Color(0xFF10B981).withValues(alpha: 0.3),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.shield_outlined,
-                  color: Color(0xFF10B981),
-                  size: 20,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Secured via encrypted gateway. All transactions are 256-bit SSL protected.',
-                    style: TextStyle(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.9),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -429,7 +399,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           ),
           const SizedBox(height: 6),
           const Text(
-            'Supercharge your impact with exclusive features.',
+            'Support Voluntree with a monthly or annual plan.',
             style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
             textAlign: TextAlign.center,
           ),
@@ -438,12 +408,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             title: 'Monthly Plan',
             price: '₹499',
             period: '/month',
-            features: const [
-              'Featured event listings',
-              'Priority applicant filtering',
-              'Verified organizer badge',
-              'Advanced analytics',
-            ],
             accent: const Color(0xFF6366F1),
             onSubscribe: () => _handleSubscribe(auth, payments, 'MONTHLY'),
           ),
@@ -453,12 +417,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             price: '₹4,999',
             period: '/year',
             saving: 'Save ₹989',
-            features: const [
-              'All Monthly features',
-              'Unlimited event campaigns',
-              'Donation tracking dashboard',
-              'API access for integrations',
-            ],
             accent: const Color(0xFFD97706),
             onSubscribe: () => _handleSubscribe(auth, payments, 'ANNUAL'),
           ),
@@ -657,7 +615,6 @@ class _PlanCard extends StatelessWidget {
   final String price;
   final String period;
   final String? saving;
-  final List<String> features;
   final Color accent;
   final VoidCallback onSubscribe;
 
@@ -666,7 +623,6 @@ class _PlanCard extends StatelessWidget {
     required this.price,
     required this.period,
     this.saving,
-    required this.features,
     required this.accent,
     required this.onSubscribe,
   });
@@ -735,24 +691,6 @@ class _PlanCard extends StatelessWidget {
             ],
           ),
           const Divider(color: Color(0xFF334155), height: 24),
-          ...features.map(
-            (f) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle_outline, color: accent, size: 16),
-                  const SizedBox(width: 10),
-                  Text(
-                    f,
-                    style: const TextStyle(
-                      color: Color(0xFFCBD5E1),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

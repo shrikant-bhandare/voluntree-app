@@ -3,12 +3,16 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
+import '../services/api_helpers.dart';
 import '../widgets/animated_button.dart';
 import '../widgets/responsive.dart';
 import '../services/report_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'direct_chat_screen.dart';
 import 'qr_pass_screen.dart';
+import 'edit_profile_screen.dart';
+import '../utils/drive_cta.dart';
+import '../utils/event_time.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel? event;
@@ -43,9 +47,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not launch map app: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open a maps app.')),
+        );
       }
     }
   }
@@ -116,7 +120,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   /// Returns true when the application was accepted (the sheet is popped).
-  Future<bool> _apply(String position) async {
+  Future<bool> _apply(String? position) async {
     if (_event == null) return false;
 
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -142,8 +146,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         if (app['status'] != 'APPROVED') return false;
         final evt = app['event'];
         if (evt == null) return false;
-        final start = DateTime.parse(evt['startTime']);
-        final end = DateTime.parse(evt['endTime']);
+        final start = parseServerDateOrNull(evt['startTime']);
+        final end = parseServerDateOrNull(evt['endTime']);
+        if (start == null || end == null) return false;
 
         return start.isBefore(newEnd) && end.isAfter(newStart);
       }, orElse: () => null);
@@ -175,7 +180,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Successfully applied for "${_event!.title}" as $position! Status: Pending.',
+            position == null
+                ? 'Applied to "${_event!.title}". The organizer will review your application.'
+                : 'Applied to "${_event!.title}" as $position. The organizer will review your application.',
           ),
           backgroundColor: const Color(0xFF006C48),
         ),
@@ -192,7 +199,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     return false;
   }
 
-  void _showApplyBottomSheet(String position) {
+  void _showApplyBottomSheet(String? position) {
     if (_event == null) return;
 
     showModalBottomSheet(
@@ -224,7 +231,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Apply for Position',
+                        position == null
+                            ? 'Apply to this drive'
+                            : 'Apply for Position',
                         style: GoogleFonts.plusJakartaSans(
                           textStyle: const TextStyle(
                             color: Color(0xFF012D1D),
@@ -240,14 +249,15 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    'Role: $position',
-                    style: const TextStyle(
-                      color: Color(0xFF006C48),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                  if (position != null)
+                    Text(
+                      'Role: $position',
+                      style: const TextStyle(
+                        color: Color(0xFF006C48),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _messageController,
@@ -381,12 +391,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       } catch (_) {}
     }
 
-    final dateStr =
-        '${e.startTime.day}/${e.startTime.month}/${e.startTime.year}';
-    final timeStr =
-        '${e.startTime.hour.toString().padLeft(2, '0')}:${e.startTime.minute.toString().padLeft(2, '0')}';
-    final endTimeStr =
-        '${e.endTime.hour.toString().padLeft(2, '0')}:${e.endTime.minute.toString().padLeft(2, '0')}';
+    final cta = detailCtaFor(
+      status: e.status,
+      endTime: e.endTime,
+      minAge: e.minAge,
+      dateOfBirth: authService.currentUser?.dateOfBirth,
+      applicationStatus: myApp?['status'] as String?,
+    );
+
+    final dateStr = formatLocalDate(e.startTime);
+    final timeStr = formatLocalTime(e.startTime);
+    final endTimeStr = formatLocalTime(e.endTime);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -511,6 +526,29 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _buildMetaChip(
+                              icon: Icons.flag_outlined,
+                              label: driveStatusLabel(e.status, e.endTime),
+                              highlight:
+                                  openDriveStatuses.contains(e.status) &&
+                                  e.endTime.isAfter(DateTime.now()),
+                            ),
+                            _buildMetaChip(
+                              icon: Icons.cake_outlined,
+                              label: 'Ages ${e.minAge}+',
+                            ),
+                            if (e.isOnline)
+                              _buildMetaChip(
+                                icon: Icons.videocam_outlined,
+                                label: 'Online drive',
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
 
                         // Spots countdown badge status progress
                         Builder(
@@ -811,223 +849,68 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                         ),
                         const Divider(height: 32),
 
-                        // Open Positions Bento Grid
-                        Text(
-                          'Open Positions',
-                          style: GoogleFonts.plusJakartaSans(
-                            textStyle: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                        // Positions: only what the organizer listed. No
+                        // invented roles, spot counts or experience badges.
+                        if (e.openPositions.isNotEmpty) ...[
+                          Text(
+                            'Open Positions',
+                            style: GoogleFonts.plusJakartaSans(
+                              textStyle: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Builder(
-                          builder: (context) {
-                            String leadTitle = 'Campaign Lead';
-                            String supportTitle = 'General Support';
-
-                            final categoryLower = e.category.toLowerCase();
-                            if (categoryLower.contains('env')) {
-                              leadTitle = 'Eco Team Lead';
-                              supportTitle = 'Cleanup Volunteer';
-                            } else if (categoryLower.contains('med')) {
-                              leadTitle = 'First Aid Lead';
-                              supportTitle = 'Health Assistant';
-                            } else if (categoryLower.contains('edu')) {
-                              leadTitle = 'Study Advisor';
-                              supportTitle = 'Tutor Helper';
-                            } else if (categoryLower.contains('anim')) {
-                              leadTitle = 'Vet Coordinator';
-                              supportTitle = 'Animal Caretaker';
-                            } else if (categoryLower.contains('disast') ||
-                                categoryLower.contains('crisis')) {
-                              leadTitle = 'Crisis Dispatcher';
-                              supportTitle = 'Supply Helper';
-                            } else if (categoryLower.contains('social') ||
-                                categoryLower.contains('commun')) {
-                              leadTitle = 'Community Lead';
-                              supportTitle = 'General Volunteer';
-                            }
-
-                            final bool hasApplied = myApp != null;
-                            final String statusText = hasApplied
-                                ? (myApp['status'] == 'APPROVED'
-                                      ? 'Approved'
-                                      : myApp['status'] == 'REJECTED'
-                                      ? 'Declined'
-                                      : myApp['status'] == 'WAITLISTED'
-                                      ? 'Waitlisted'
-                                      : 'Applied')
-                                : 'Apply';
-                            final Color? statusColor = hasApplied
-                                ? (myApp['status'] == 'APPROVED'
-                                      ? const Color(0xFF0E6C4A)
-                                      : myApp['status'] == 'REJECTED'
-                                      ? const Color(0xFFBA1A1A)
-                                      : myApp['status'] == 'WAITLISTED'
-                                      ? const Color(0xFF3B82F6)
-                                      : const Color(0xFFEAB308))
-                                : null;
-
-                            final List<String> positionsToShow =
-                                e.openPositions.isNotEmpty
-                                ? e.openPositions
-                                : [leadTitle, supportTitle];
-
-                            final int spotsPerRole =
-                                (e.volunteersNeeded / positionsToShow.length)
-                                    .round()
-                                    .clamp(1, 100);
-
-                            List<Widget> positionRows = [];
-                            for (
-                              int i = 0;
-                              i < positionsToShow.length;
-                              i += 2
-                            ) {
-                              final bool hasNext =
-                                  i + 1 < positionsToShow.length;
-                              final pos1 = positionsToShow[i];
-                              final pos2 = hasNext
-                                  ? positionsToShow[i + 1]
-                                  : null;
-
-                              final isLead1 =
-                                  pos1.toLowerCase().contains('lead') ||
-                                  pos1.toLowerCase().contains('coordinator') ||
-                                  pos1.toLowerCase().contains('director');
-                              final badgeColor1 = isLead1
-                                  ? const Color(0xFFFD8704)
-                                  : const Color(0xFF006C48);
-                              final badgeText1 = isLead1
-                                  ? 'Experience needed'
-                                  : 'Beginner friendly';
-
-                              positionRows.add(
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _buildPositionBentoCard(
-                                        title: pos1,
-                                        spots: '$spotsPerRole spots left',
-                                        badgeText: badgeText1,
-                                        badgeColor: badgeColor1,
-                                        onTap: hasApplied
-                                            ? null
-                                            : () => _showApplyBottomSheet(pos1),
-                                        buttonText: statusText,
-                                        buttonColor: statusColor,
-                                      ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: e.openPositions
+                                .map(
+                                  (pos) => SizedBox(
+                                    width: 200,
+                                    child: _buildPositionCard(
+                                      title: pos,
+                                      onTap: cta.kind == DetailCtaKind.apply
+                                          ? () => _showApplyBottomSheet(pos)
+                                          : null,
+                                      buttonText:
+                                          cta.kind == DetailCtaKind.apply
+                                          ? 'Apply'
+                                          : cta.label,
                                     ),
-                                    if (pos2 != null) ...[
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Builder(
-                                          builder: (context) {
-                                            final isLead2 =
-                                                pos2.toLowerCase().contains(
-                                                  'lead',
-                                                ) ||
-                                                pos2.toLowerCase().contains(
-                                                  'coordinator',
-                                                ) ||
-                                                pos2.toLowerCase().contains(
-                                                  'director',
-                                                );
-                                            final badgeColor2 = isLead2
-                                                ? const Color(0xFFFD8704)
-                                                : const Color(0xFF006C48);
-                                            final badgeText2 = isLead2
-                                                ? 'Experience needed'
-                                                : 'Beginner friendly';
-                                            return _buildPositionBentoCard(
-                                              title: pos2,
-                                              spots: '$spotsPerRole spots left',
-                                              badgeText: badgeText2,
-                                              badgeColor: badgeColor2,
-                                              onTap: hasApplied
-                                                  ? null
-                                                  : () => _showApplyBottomSheet(
-                                                      pos2,
-                                                    ),
-                                              buttonText: statusText,
-                                              buttonColor: statusColor,
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      const SizedBox(width: 12),
-                                      const Expanded(child: SizedBox()),
-                                    ],
-                                  ],
-                                ),
-                              );
-                              if (hasNext) {
-                                positionRows.add(const SizedBox(height: 12));
-                              }
-                            }
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                          const Divider(height: 32),
+                        ],
 
-                            return Column(children: positionRows);
-                          },
-                        ),
-                        const Divider(height: 32),
-
-                        // Perks Row
-                        Text(
-                          'Perks & Benefits',
-                          style: GoogleFonts.plusJakartaSans(
-                            textStyle: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                        // Perks: only what the organizer listed.
+                        if (e.perks.isNotEmpty) ...[
+                          Text(
+                            'Perks & Benefits',
+                            style: GoogleFonts.plusJakartaSans(
+                              textStyle: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children:
-                              (e.perks.isNotEmpty
-                                      ? e.perks
-                                      : [
-                                          'Certificate Provided',
-                                          'Free Lunch & Water',
-                                          'Eco Badges XP',
-                                          'Networking Opportunity',
-                                        ])
-                                  .map((perk) {
-                                    IconData perkIcon = Icons.card_giftcard;
-                                    final lower = perk.toLowerCase();
-                                    if (lower.contains('cert')) {
-                                      perkIcon = Icons.school;
-                                    } else if (lower.contains('lunch') ||
-                                        lower.contains('food') ||
-                                        lower.contains('water') ||
-                                        lower.contains('meal')) {
-                                      perkIcon = Icons.restaurant;
-                                    } else if (lower.contains('eco') ||
-                                        lower.contains('badge') ||
-                                        lower.contains('green')) {
-                                      perkIcon = Icons.eco;
-                                    } else if (lower.contains('network') ||
-                                        lower.contains('peop') ||
-                                        lower.contains('meet')) {
-                                      perkIcon = Icons.people;
-                                    } else if (lower.contains('travel') ||
-                                        lower.contains('stipend') ||
-                                        lower.contains('money') ||
-                                        lower.contains('pay')) {
-                                      perkIcon = Icons.monetization_on;
-                                    }
-                                    return _buildPerkChip(perk, perkIcon);
-                                  })
-                                  .toList(),
-                        ),
-                        const SizedBox(height: 30),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: e.perks
+                                .map(
+                                  (perk) => _buildPerkChip(perk, Icons.check),
+                                )
+                                .toList(),
+                          ),
+                          const SizedBox(height: 30),
+                        ],
 
                         // Spam Flag Warning Report Link
                         Align(
@@ -1060,108 +943,105 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               bottom: 0,
               left: 0,
               right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 20,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // Chat button
-                    PremiumAnimatedButton(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => DirectChatScreen(
-                              targetUserId: e.organizerId,
-                              targetUserName: e.organizerName,
-                            ),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFE8EFF1)),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.all(12),
-                        child: const Icon(
-                          Icons.chat_bubble_outline,
-                          color: Color(0xFF012D1D),
-                        ),
+              child: SafeArea(
+                top: false,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 20,
+                        offset: const Offset(0, -4),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-
-                    // Apply Now button
-                    Expanded(
-                      child: PremiumAnimatedButton(
-                        onTap: myApp != null
-                            ? (myApp['status'] == 'APPROVED'
-                                  ? () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => QrPassScreen(
-                                            applicationId: myApp!['id'],
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  : null)
-                            : () => _showApplyBottomSheet('General Volunteer'),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Chat button
+                      PremiumAnimatedButton(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DirectChatScreen(
+                                targetUserId: e.organizerId,
+                                targetUserName: e.organizerName,
+                              ),
+                            ),
+                          );
+                        },
                         child: Container(
-                          width: double.infinity,
-                          alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: myApp != null
-                                ? (myApp['status'] == 'APPROVED'
-                                      ? const Color(0xFF0E6C4A)
-                                      : myApp['status'] == 'REJECTED'
-                                      ? const Color(0xFFBA1A1A)
-                                      : myApp['status'] == 'WAITLISTED'
-                                      ? const Color(0xFF3B82F6)
-                                      : const Color(0xFFEAB308))
-                                : const Color(0xFF012D1D),
+                            border: Border.all(color: const Color(0xFFE8EFF1)),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            myApp != null
-                                ? (myApp['status'] == 'APPROVED'
-                                      ? 'View QR Entry Pass'
-                                      : myApp['status'] == 'REJECTED'
-                                      ? 'Application Declined'
-                                      : myApp['status'] == 'WAITLISTED'
-                                      ? 'Waitlisted'
-                                      : 'Applied (Pending)')
-                                : 'Apply Now',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color:
-                                  myApp != null &&
-                                      (myApp['status'] == 'PENDING' ||
-                                          myApp['status'] == 'UNDER_REVIEW')
-                                  ? Colors.black87
-                                  : Colors.white,
+                          padding: const EdgeInsets.all(12),
+                          child: const Icon(
+                            Icons.chat_bubble_outline,
+                            color: Color(0xFF012D1D),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+
+                      // Primary call to action
+                      Expanded(
+                        child: PremiumAnimatedButton(
+                          onTap: switch (cta.kind) {
+                            DetailCtaKind.viewPass => () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      QrPassScreen(applicationId: myApp!['id']),
+                                ),
+                              );
+                            },
+                            DetailCtaKind.apply => () => _showApplyBottomSheet(
+                              null,
+                            ),
+                            DetailCtaKind.addDateOfBirth => () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const EditProfileScreen(),
+                                ),
+                              );
+                            },
+                            DetailCtaKind.none => null,
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: cta.enabled
+                                  ? const Color(0xFF012D1D)
+                                  : const Color(0xFFE8EFF1),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Text(
+                              cta.label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: cta.enabled
+                                    ? Colors.white
+                                    : const Color(0xFF414844),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1226,14 +1106,39 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     );
   }
 
-  Widget _buildPositionBentoCard({
+  Widget _buildMetaChip({
+    required IconData icon,
+    required String label,
+    bool highlight = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: highlight ? const Color(0xFFA0F4C8) : const Color(0xFFE8EFF1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF012D1D)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF012D1D),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPositionCard({
     required String title,
-    required String spots,
-    required String badgeText,
-    required Color badgeColor,
     required VoidCallback? onTap,
-    String buttonText = 'Apply',
-    Color? buttonColor,
+    required String buttonText,
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1250,32 +1155,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             style: const TextStyle(
               color: Color(0xFF012D1D),
               fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            spots,
-            style: const TextStyle(
-              color: Color(0xFFEF4444),
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: badgeColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              badgeText,
-              style: TextStyle(
-                color: badgeColor,
-                fontSize: 8,
-                fontWeight: FontWeight.bold,
-              ),
+              fontSize: 14,
             ),
           ),
           const SizedBox(height: 12),
@@ -1283,10 +1163,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             width: double.infinity,
             child: TextButton(
               style: TextButton.styleFrom(
-                backgroundColor: onTap == null
-                    ? (buttonColor ?? const Color(0xFFF4FAFD))
-                    : const Color(0xFFF4FAFD),
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                backgroundColor: const Color(0xFFF4FAFD),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1294,9 +1172,12 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               onPressed: onTap,
               child: Text(
                 buttonText,
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: onTap == null ? Colors.white : const Color(0xFF012D1D),
-                  fontSize: 11,
+                  color: onTap == null
+                      ? const Color(0xFF717973)
+                      : const Color(0xFF012D1D),
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1352,6 +1233,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     String selectedCategory = 'SPAM';
     final reasonController = TextEditingController();
     bool isSubmittingReport = false;
+    String? reportError;
 
     showModalBottomSheet(
       context: context,
@@ -1398,7 +1280,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    value: selectedCategory,
+                    initialValue: selectedCategory,
                     dropdownColor: Colors.white,
                     style: const TextStyle(color: Color(0xFF161D1F)),
                     decoration: InputDecoration(
@@ -1441,7 +1323,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     maxLines: 3,
                     style: const TextStyle(color: Color(0xFF161D1F)),
                     decoration: InputDecoration(
-                      hintText: 'Provide additional details...',
+                      hintText:
+                          'What happened? (at least $minReportReasonLength characters)',
                       hintStyle: TextStyle(color: Colors.grey[500]),
                       filled: true,
                       fillColor: const Color(0xFFF3F4F5),
@@ -1451,56 +1334,61 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       ),
                     ),
                   ),
+                  if (reportError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      reportError!,
+                      style: const TextStyle(
+                        color: Color(0xFFBA1A1A),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: isSubmittingReport
                         ? null
                         : () async {
                             final reason = reasonController.text.trim();
-                            if (reason.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Please enter a description.'),
-                                ),
-                              );
+                            if (reason.length < minReportReasonLength) {
+                              setModalState(() {
+                                reportError =
+                                    'Please describe the problem in at least $minReportReasonLength characters.';
+                              });
                               return;
                             }
 
                             setModalState(() {
                               isSubmittingReport = true;
+                              reportError = null;
                             });
 
-                            final success = await reportService.submitReport(
+                            final error = await reportService.submitReport(
                               token: authService.token!,
                               eventId: _event!.id,
                               category: selectedCategory,
                               reason: reason,
                             );
 
-                            if (!mounted) return;
+                            if (!mounted || !context.mounted) return;
 
-                            if (success) {
+                            if (error == null) {
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              ScaffoldMessenger.of(this.context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
                                     'Thank you. The report has been sent to administrators.',
                                   ),
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: Color(0xFF0E6C4A),
                                 ),
                               );
                             } else {
+                              // Shown inside the sheet: a SnackBar would sit
+                              // behind the modal and go unseen.
                               setModalState(() {
                                 isSubmittingReport = false;
+                                reportError = error;
                               });
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Failed to submit report. Please try again.',
-                                  ),
-                                  backgroundColor: Colors.redAccent,
-                                ),
-                              );
                             }
                           },
                     style: ElevatedButton.styleFrom(

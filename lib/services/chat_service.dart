@@ -148,19 +148,11 @@ class ChatMessage {
       isPinned: json['isPinned'] ?? false,
       isEdited: json['isEdited'] ?? false,
       isDeleted: json['isDeleted'] ?? false,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : DateTime.now(),
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
-          : DateTime.now(),
-      deliveredAt: json['deliveredAt'] != null
-          ? DateTime.parse(json['deliveredAt'])
-          : null,
-      readAt: json['readAt'] != null ? DateTime.parse(json['readAt']) : null,
-      editedAt: json['editedAt'] != null
-          ? DateTime.parse(json['editedAt'])
-          : null,
+      createdAt: parseServerDate(json['createdAt']),
+      updatedAt: parseServerDate(json['updatedAt']),
+      deliveredAt: parseServerDateOrNull(json['deliveredAt']),
+      readAt: parseServerDateOrNull(json['readAt']),
+      editedAt: parseServerDateOrNull(json['editedAt']),
       senderName: sender['fullName'] ?? 'User',
     );
   }
@@ -730,6 +722,71 @@ class ChatService extends ChangeNotifier {
       debugPrint('[CHAT SERVICE] Delete Message Error: $e');
     }
     return false;
+  }
+
+  /// IDs of people the signed-in user has blocked (`GET /messages/blocked`).
+  Future<Set<String>> fetchBlockedUserIds(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/messages/blocked'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return unwrapList(jsonDecode(response.body))
+            .whereType<Map>()
+            .map(
+              (row) => (row['blockedId'] ?? row['blocked']?['id'])?.toString(),
+            )
+            .whereType<String>()
+            .toSet();
+      }
+    } catch (e) {
+      debugPrint('[CHAT SERVICE] fetchBlockedUserIds error: $e');
+    }
+    return {};
+  }
+
+  /// Blocks [userId] in both directions. Returns null on success, otherwise
+  /// the message to show.
+  Future<String?> blockUser(String token, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/messages/block/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return null;
+      }
+      return apiMessage(
+        tryDecodeJson(response.body),
+        'Could not block this person. Please try again.',
+      );
+    } catch (e) {
+      return friendlyNetworkError(e);
+    }
+  }
+
+  /// Removes a block. Returns null on success, otherwise the message to show.
+  Future<String?> unblockUser(String token, String userId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/messages/block/$userId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return null;
+      }
+      return apiMessage(
+        tryDecodeJson(response.body),
+        'Could not unblock this person. Please try again.',
+      );
+    } catch (e) {
+      return friendlyNetworkError(e);
+    }
   }
 
   Future<bool> toggleStarMessage(String token, String messageId) async {

@@ -7,6 +7,8 @@ import '../widgets/animated_button.dart';
 import '../widgets/responsive.dart';
 import 'direct_chat_screen.dart';
 import 'create_event_screen.dart';
+import '../utils/text_utils.dart';
+import '../widgets/confirm_dialog.dart';
 
 class VolunteerManagementScreen extends StatefulWidget {
   final String eventId;
@@ -66,11 +68,27 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
     });
   }
 
-  Future<void> _updateStatus(String applicationId, String status) async {
+  Future<void> _updateStatus(
+    String applicationId,
+    String status,
+    String volunteerName,
+  ) async {
     final auth = Provider.of<AuthService>(context, listen: false);
     final eventService = Provider.of<EventService>(context, listen: false);
 
     if (auth.token == null) return;
+
+    final approving = status == 'APPROVED';
+    final ok = await confirmAction(
+      context,
+      title: approving ? 'Approve $volunteerName?' : 'Decline $volunteerName?',
+      message: approving
+          ? 'They will be notified and receive an entry pass for this drive.'
+          : 'They will be notified that their application was not accepted.',
+      confirmLabel: approving ? 'Approve' : 'Decline',
+      destructive: !approving,
+    );
+    if (!ok || !mounted) return;
 
     // Show inline loading or overlay
     showDialog(
@@ -90,7 +108,11 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
 
       if (result['success']) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Application $status successfully.')),
+          SnackBar(
+            content: Text(
+              approving ? 'Application approved.' : 'Application declined.',
+            ),
+          ),
         );
         _loadApplications(); // reload
         // The dashboard counts and the event's FULL/ACTIVE state come from
@@ -110,6 +132,57 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
     }
   }
 
+  /// The drive's current status, from the organizer's own list.
+  String? get _eventStatus {
+    final eventService = Provider.of<EventService>(context, listen: false);
+    for (final e in eventService.myEvents) {
+      if (e.id == widget.eventId) return e.status;
+    }
+    return null;
+  }
+
+  Future<void> _confirmCancelDrive() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final eventService = Provider.of<EventService>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    if (auth.token == null) return;
+
+    final ok = await confirmAction(
+      context,
+      title: 'Cancel this drive?',
+      message: 'Everyone who applied will be notified. This cannot be undone.',
+      confirmLabel: 'Cancel drive',
+      cancelLabel: 'Keep drive',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+
+    final result = await eventService.updateEventStatus(
+      auth.token!,
+      widget.eventId,
+      'CANCELLED',
+    );
+    if (!mounted) return;
+    if (result['success'] == true) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Drive cancelled. Applicants have been notified.'),
+        ),
+      );
+      eventService.fetchMyEvents(auth.token!);
+      eventService.fetchOrganizerApplications(auth.token!);
+      eventService.fetchEvents();
+      navigator.pop(true);
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Could not cancel the drive.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _confirmDeleteEvent() async {
     final auth = Provider.of<AuthService>(context, listen: false);
     final eventService = Provider.of<EventService>(context, listen: false);
@@ -121,9 +194,9 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Event'),
+        title: const Text('Delete drive'),
         content: const Text(
-          'Are you sure you want to permanently delete this event? This action cannot be undone.',
+          'Nobody has applied yet, so this drive can be deleted permanently. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -161,6 +234,7 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
           );
           // Go back to the dashboard and trigger events list refresh
           eventService.fetchEvents();
+          eventService.fetchMyEvents(auth.token!);
           navigator.pop(true);
         } else {
           messenger.showSnackBar(
@@ -244,11 +318,30 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
               }
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-            tooltip: 'Delete Event',
-            onPressed: () => _confirmDeleteEvent(),
-          ),
+          // Cancel keeps every application, pass and logged hour; delete is
+          // only offered for a drive nobody has applied to (the server
+          // refuses otherwise, and its message is shown).
+          if (!_isLoading &&
+              !const {'CANCELLED', 'COMPLETED'}.contains(_eventStatus))
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              icon: Icon(Icons.more_vert, color: theme.colorScheme.primary),
+              onSelected: (value) {
+                if (value == 'cancel') _confirmCancelDrive();
+                if (value == 'delete') _confirmDeleteEvent();
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'cancel',
+                  child: Text('Cancel drive'),
+                ),
+                if (_applications.isEmpty)
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete drive'),
+                  ),
+              ],
+            ),
         ],
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,11 +442,18 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
         // The API names the relation `volunteer`; `user` was always empty.
         final userObj = app['volunteer'] ?? {};
         final profile = userObj['profile'] ?? {};
-        final name = userObj['fullName'] ?? 'Anonymous Volunteer';
-        final email = userObj['email'] ?? '';
-        final role = app['roleRequested'] ?? 'Helper';
-        final message =
-            app['message'] ?? 'Eager to contribute and support the team!';
+        final rawName = (userObj['fullName'] as String?)?.trim() ?? '';
+        final name = rawName.isEmpty ? 'Volunteer' : rawName;
+        // Contact details are only sent for APPROVED applicants (the API
+        // strips them from pending rows), so never assume they exist.
+        final email = (userObj['email'] as String?)?.trim() ?? '';
+        final phone = (userObj['phoneNumber'] as String?)?.trim() ?? '';
+        final contactLine = [
+          email,
+          phone,
+        ].where((v) => v.isNotEmpty).join(' · ');
+        final role = (app['roleRequested'] as String?)?.trim() ?? '';
+        final message = (app['message'] as String?)?.trim() ?? '';
         final repScore = profile['reputationScore'] ?? 0;
         final repLevel = profile['reputationLevel'] ?? 'BRONZE';
 
@@ -382,7 +482,7 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                     radius: 20,
                     backgroundColor: theme.colorScheme.secondaryContainer,
                     child: Text(
-                      name[0].toUpperCase(),
+                      initialOf(name),
                       style: TextStyle(
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.bold,
@@ -433,13 +533,14 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                             ),
                           ],
                         ),
-                        Text(
-                          email,
-                          style: const TextStyle(
-                            color: Color(0xFF717973),
-                            fontSize: 11,
+                        if (contactLine.isNotEmpty)
+                          Text(
+                            contactLine,
+                            style: const TextStyle(
+                              color: Color(0xFF717973),
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -481,60 +582,63 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
               const Divider(color: Color(0xFFE8EFF1), height: 1),
               const SizedBox(height: 12),
 
-              // Position / Role details
-              Row(
-                children: [
-                  const Text(
-                    'ROLE REQUESTED: ',
-                    style: TextStyle(
-                      color: Color(0xFF717973),
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.secondaryContainer,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      role,
+              // Only what the volunteer actually sent.
+              if (role.isNotEmpty) ...[
+                Row(
+                  children: [
+                    const Text(
+                      'ROLE REQUESTED: ',
                       style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontSize: 9,
+                        color: Color(0xFF717973),
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
                     ),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          role,
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (message.isNotEmpty) ...[
+                const Text(
+                  'MESSAGE FROM VOLUNTEER',
+                  style: TextStyle(
+                    color: Color(0xFF717973),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Candidate note / message statement
-              const Text(
-                'STATEMENT / NOTES:',
-                style: TextStyle(
-                  color: Color(0xFF717973),
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '"$message"',
-                style: const TextStyle(
-                  color: Color(0xFF414844),
-                  fontStyle: FontStyle.italic,
-                  fontSize: 12,
-                  height: 1.4,
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: Color(0xFF414844),
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
                 ),
-              ),
+              ],
 
               // Action buttons if pending
               if (isPending) ...[
@@ -543,7 +647,7 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                   children: [
                     Expanded(
                       child: PremiumAnimatedButton(
-                        onTap: () => _updateStatus(app['id'], 'REJECTED'),
+                        onTap: () => _updateStatus(app['id'], 'REJECTED', name),
                         child: Container(
                           alignment: Alignment.center,
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -565,7 +669,7 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                     const SizedBox(width: 12),
                     Expanded(
                       child: PremiumAnimatedButton(
-                        onTap: () => _updateStatus(app['id'], 'APPROVED'),
+                        onTap: () => _updateStatus(app['id'], 'APPROVED', name),
                         child: Container(
                           alignment: Alignment.center,
                           padding: const EdgeInsets.symmetric(vertical: 12),

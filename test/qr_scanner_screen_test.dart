@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volunteer_mobile_app/screens/qr_scanner_screen.dart';
 import 'package:volunteer_mobile_app/services/auth_service.dart';
 import 'package:volunteer_mobile_app/services/attendance_service.dart';
+import 'package:volunteer_mobile_app/services/event_service.dart';
 
 class MockAuthService extends AuthService {
   MockAuthService() : super();
@@ -45,6 +46,48 @@ class MockAttendanceService extends AttendanceService {
   ) async {
     verifyScannedPassCalled = true;
     lastPassedToken = passToken;
+    return resultToReturn;
+  }
+}
+
+class MockEventService extends EventService {
+  @override
+  bool get hasLoadedMyEvents => true;
+
+  @override
+  List<EventModel> get myEvents => [
+    EventModel.fromJson({
+      'id': '11111111-1111-1111-1111-111111111111',
+      'title': 'Beach clean-up',
+      'status': 'ACTIVE',
+      'startTime': '2026-11-01T03:30:00.000Z',
+      'endTime': '2026-11-01T08:30:00.000Z',
+    }),
+    EventModel.fromJson({
+      'id': '22222222-2222-2222-2222-222222222222',
+      'title': 'Old drive',
+      'status': 'COMPLETED',
+      'startTime': '2026-01-01T03:30:00.000Z',
+      'endTime': '2026-01-01T08:30:00.000Z',
+    }),
+  ];
+
+  @override
+  Future<void> fetchMyEvents(String token) async {}
+}
+
+class MockPassCodeAttendanceService extends MockAttendanceService {
+  String? lastEventId;
+  String? lastPassCode;
+
+  @override
+  Future<Map<String, dynamic>> verifyPassCode(
+    String token, {
+    required String eventId,
+    required String passCode,
+  }) async {
+    lastEventId = eventId;
+    lastPassCode = passCode;
     return resultToReturn;
   }
 }
@@ -91,6 +134,9 @@ void main() {
             ChangeNotifierProvider<AttendanceService>.value(
               value: mockAttendance,
             ),
+            ChangeNotifierProvider<EventService>.value(
+              value: MockEventService(),
+            ),
           ],
           child: const MaterialApp(home: QrScannerScreen()),
         ),
@@ -136,6 +182,7 @@ void main() {
           ChangeNotifierProvider<AttendanceService>.value(
             value: mockAttendance,
           ),
+          ChangeNotifierProvider<EventService>.value(value: MockEventService()),
         ],
         child: const MaterialApp(home: QrScannerScreen()),
       ),
@@ -144,14 +191,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Align QR Pass within the frame'), findsOneWidget);
-    expect(find.text('Development Verification Panel'), findsOneWidget);
-    expect(find.text('Verify Scanned Token'), findsOneWidget);
+    // Production copy for the manual fallback (MOB-24).
+    expect(find.text('Development Verification Panel'), findsNothing);
+    expect(find.text('Enter pass code'), findsOneWidget);
+    expect(find.text('Check in or out'), findsOneWidget);
   });
 
   testWidgets(
-    'Simulating manual token input successfully submits and opens Dialog',
+    'Manual pass code entry sends the chosen drive and code, opens Dialog',
     (WidgetTester tester) async {
-      // Mock permission status as Granted (1)
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
             const MethodChannel('flutter.baseflow.com/permissions/methods'),
@@ -163,8 +211,12 @@ void main() {
             },
           );
 
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
       final mockAuth = MockAuthService();
-      final mockAttendance = MockAttendanceService();
+      final mockAttendance = MockPassCodeAttendanceService();
 
       await tester.pumpWidget(
         MultiProvider(
@@ -173,6 +225,9 @@ void main() {
             ChangeNotifierProvider<AttendanceService>.value(
               value: mockAttendance,
             ),
+            ChangeNotifierProvider<EventService>.value(
+              value: MockEventService(),
+            ),
           ],
           child: const MaterialApp(home: QrScannerScreen()),
         ),
@@ -180,23 +235,35 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      final textField = find.byType(TextField);
-      expect(textField, findsOneWidget);
+      // Only live drives are offered; with one, it is preselected.
+      expect(find.textContaining('Beach clean-up'), findsOneWidget);
+      expect(find.textContaining('Old drive'), findsNothing);
 
-      await tester.enterText(textField, 'mock-pass-token-string');
-      await tester.tap(find.text('Verify Scanned Token'));
-      await tester.pump(); // Starts loading state
+      final codeField = find.byType(TextField);
+      expect(codeField, findsOneWidget);
 
-      expect(mockAttendance.verifyScannedPassCalled, true);
-      expect(mockAttendance.lastPassedToken, 'mock-pass-token-string');
+      // Too short: refused client-side, nothing sent.
+      await tester.enterText(codeField, 'K7QM');
+      await tester.tap(find.text('Check in or out'));
+      await tester.pump();
+      expect(mockAttendance.lastPassCode, isNull);
+      expect(find.textContaining('Enter the 8-character code'), findsOneWidget);
 
-      await tester.pumpAndSettle(); // Finishes async call and renders Dialog
+      await tester.enterText(codeField, 'k7qm-2xpa');
+      await tester.tap(find.text('Check in or out'));
+      await tester.pump();
+
+      expect(
+        mockAttendance.lastEventId,
+        '11111111-1111-1111-1111-111111111111',
+      );
+      expect(mockAttendance.lastPassCode, 'K7QM2XPA');
+
+      await tester.pumpAndSettle();
 
       expect(find.text('Check-In Success'), findsOneWidget);
       expect(find.text('Successfully checked in Mock User'), findsOneWidget);
-      expect(find.text('OK'), findsOneWidget);
 
-      // Tap OK to close dialog
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
 

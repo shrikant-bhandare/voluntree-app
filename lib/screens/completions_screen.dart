@@ -1,25 +1,30 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
+import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/attendance_service.dart';
 import '../widgets/responsive.dart';
+import '../utils/file_save.dart';
 
-/// Writes the PDF where the user can find it. The old handler fetched the
-/// bytes, discarded them and reported "downloaded successfully".
+/// Hands the PDF to the user: the system "Save to…" picker on Android/iOS
+/// (the old app-private documents folder was invisible in Files) and a
+/// browser download on the web build. Returns the message to show, or null
+/// when the user cancelled.
 Future<String?> _saveCertificate(Uint8List bytes, String attendanceId) async {
-  if (kIsWeb) return null;
-  try {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/voluntree_certificate_$attendanceId.pdf');
-    await file.writeAsBytes(bytes, flush: true);
-    return 'Certificate saved to ${file.path}';
-  } catch (e) {
-    debugPrint('[CERTIFICATE] save failed: $e');
-    return null;
+  final outcome = await saveBytesForUser(
+    bytes: bytes,
+    fileName: 'voluntree_certificate_$attendanceId.pdf',
+    mimeType: 'application/pdf',
+    dialogTitle: 'Save certificate',
+  );
+  switch (outcome) {
+    case SaveOutcome.saved:
+      return 'Certificate saved.';
+    case SaveOutcome.cancelled:
+      return null;
+    case SaveOutcome.failed:
+      return 'Could not save the certificate. Please try again.';
   }
 }
 
@@ -247,16 +252,12 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
                                     bytes,
                                     item.id,
                                   );
-                                  if (!context.mounted) return;
+                                  if (!context.mounted || saved == null) {
+                                    return;
+                                  }
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(
-                                        saved ??
-                                            'Saving certificates is not supported in the web app yet. Use the Android app to download the PDF.',
-                                      ),
-                                      backgroundColor: saved != null
-                                          ? const Color(0xFF10B981)
-                                          : Colors.orange,
+                                      content: Text(saved),
                                       duration: const Duration(seconds: 6),
                                     ),
                                   );

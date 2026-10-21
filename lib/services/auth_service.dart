@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config.dart';
 import 'api_helpers.dart';
+import '../utils/event_time.dart';
 
 class UserProfile {
   final String id;
@@ -70,6 +71,10 @@ class UserInfo {
   final bool isVerified;
   final UserProfile? profile;
 
+  /// Calendar date of birth (no time zone), or null when not on file yet.
+  /// Required by the API before a volunteer can apply to a drive.
+  final DateTime? dateOfBirth;
+
   UserInfo({
     required this.id,
     required this.email,
@@ -78,6 +83,7 @@ class UserInfo {
     required this.userType,
     required this.isVerified,
     this.profile,
+    this.dateOfBirth,
   });
 
   factory UserInfo.fromJson(Map<String, dynamic> json) {
@@ -88,6 +94,7 @@ class UserInfo {
       fullName: json['fullName'] ?? '',
       userType: json['userType'] ?? 'VOLUNTEER',
       isVerified: json['isVerified'] ?? false,
+      dateOfBirth: parseCalendarDate(json['dateOfBirth']),
       profile: json['profile'] != null
           ? UserProfile.fromJson(json['profile'])
           : null,
@@ -178,10 +185,15 @@ class AuthService extends ChangeNotifier {
   /// Every account starts as a volunteer. Organizer access is granted by the
   /// NGO verification flow, so the role is not part of this request — the
   /// server would reject it anyway.
+  ///
+  /// [dateOfBirth] is sent as a calendar date (`YYYY-MM-DD`) and
+  /// [acceptTerms] must be true; the API rejects the request otherwise.
   Future<Map<String, dynamic>> register({
     required String email,
     String? phoneNumber,
     required String fullName,
+    required DateTime dateOfBirth,
+    required bool acceptTerms,
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -194,15 +206,20 @@ class AuthService extends ChangeNotifier {
           if (phoneNumber != null && phoneNumber.isNotEmpty)
             'phoneNumber': phoneNumber,
           'fullName': fullName,
+          'dateOfBirth': formatCalendarDate(dateOfBirth),
+          'acceptTerms': acceptTerms,
         }),
       );
 
-      final data = jsonDecode(response.body);
+      final data = tryDecodeJson(response.body);
       _isLoading = false;
       notifyListeners();
 
       if (response.statusCode == 201) {
-        return {'success': true, 'message': data['message']};
+        return {
+          'success': true,
+          'message': data is Map ? data['message'] : null,
+        };
       } else {
         return {
           'success': false,
@@ -212,7 +229,7 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -233,7 +250,8 @@ class AuthService extends ChangeNotifier {
         }),
       );
 
-      final data = jsonDecode(response.body);
+      // The throttler answers 429 with a plain-text body.
+      final data = tryDecodeJson(response.body);
       _isLoading = false;
       notifyListeners();
 
@@ -246,13 +264,16 @@ class AuthService extends ChangeNotifier {
       } else {
         return {
           'success': false,
-          'message': apiMessage(data, 'Failed to request OTP'),
+          'message': otpRequestErrorMessage(
+            response.statusCode,
+            apiMessage(data, 'Could not send a code. Please try again.'),
+          ),
         };
       }
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -275,7 +296,7 @@ class AuthService extends ChangeNotifier {
         }),
       );
 
-      final data = jsonDecode(response.body);
+      final data = tryDecodeJson(response.body);
       _isLoading = false;
       notifyListeners();
 
@@ -291,7 +312,7 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -330,10 +351,7 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {
-        'success': false,
-        'message': 'Network error during SSO authentication: $e',
-      };
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -350,6 +368,7 @@ class AuthService extends ChangeNotifier {
     String? socialLinkedin,
     String? experienceLevel,
     List<String>? availability,
+    DateTime? dateOfBirth,
   }) async {
     if (_token == null) {
       return {'success': false, 'message': 'User is not authenticated.'};
@@ -377,6 +396,9 @@ class AuthService extends ChangeNotifier {
         bodyData['experienceLevel'] = experienceLevel;
       }
       if (availability != null) bodyData['availability'] = availability;
+      if (dateOfBirth != null) {
+        bodyData['dateOfBirth'] = formatCalendarDate(dateOfBirth);
+      }
 
       final response = await http.put(
         Uri.parse('$baseUrl/auth/profile'),
@@ -392,17 +414,72 @@ class AuthService extends ChangeNotifier {
         await fetchMe();
         return {'success': true};
       } else {
-        final data = jsonDecode(response.body);
         notifyListeners();
         return {
           'success': false,
-          'message': apiMessage(data, 'Failed to update profile'),
+          'message': apiMessage(
+            tryDecodeJson(response.body),
+            'Failed to update profile',
+          ),
         };
       }
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
+    }
+  }
+
+  /// `GET /auth/export` — everything the platform holds about the user, as
+  /// pretty-printed JSON bytes. Returns `{success, bytes}` or
+  /// `{success: false, message}`.
+  Future<Map<String, dynamic>> exportMyData() async {
+    if (_token == null) {
+      return {'success': false, 'message': 'Please sign in again.'};
+    }
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/auth/export'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (response.statusCode == 200) {
+        final decoded = tryDecodeJson(response.body);
+        final pretty = decoded == null
+            ? response.body
+            : const JsonEncoder.withIndent('  ').convert(decoded);
+        return {'success': true, 'bytes': utf8.encode(pretty)};
+      }
+      return {
+        'success': false,
+        'message': apiMessage(
+          tryDecodeJson(response.body),
+          'Could not prepare your data. Please try again.',
+        ),
+      };
+    } catch (e) {
+      return {'success': false, 'message': friendlyNetworkError(e)};
+    }
+  }
+
+  /// `DELETE /auth/account`. Returns null on success, otherwise the message
+  /// to show — notably the server's refusal while an organizer still hosts
+  /// upcoming drives. The caller ends the session on success.
+  Future<String?> deleteAccount() async {
+    if (_token == null) return 'Please sign in again.';
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/auth/account'),
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return null;
+      }
+      return apiMessage(
+        tryDecodeJson(response.body),
+        'Your account could not be deleted. Please try again.',
+      );
+    } catch (e) {
+      return friendlyNetworkError(e);
     }
   }
 
@@ -491,7 +568,7 @@ class AuthService extends ChangeNotifier {
         ),
       };
     } catch (e) {
-      return {'success': false, 'message': 'Network connection failed: $e'};
+      return {'success': false, 'message': friendlyNetworkError(e)};
     }
   }
 
@@ -522,4 +599,15 @@ class AuthService extends ChangeNotifier {
       return null;
     }
   }
+}
+
+/// Copy for a failed `POST /auth/request-otp`. The per-identifier limit
+/// (400 "Too many codes…") and the per-IP throttler (429) both mean "wait".
+String otpRequestErrorMessage(int statusCode, String serverMessage) {
+  if (statusCode == 429 || serverMessage.toLowerCase().contains('too many')) {
+    return "You've requested several codes in a short time. Please wait "
+        'about 15 minutes, then try again. Check your spam folder for a code '
+        'that already arrived.';
+  }
+  return serverMessage;
 }

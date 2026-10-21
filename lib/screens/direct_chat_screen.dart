@@ -12,6 +12,8 @@ import 'package:record/record.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/responsive.dart';
+import '../widgets/confirm_dialog.dart';
+import '../services/report_service.dart';
 
 class DirectChatScreen extends StatefulWidget {
   final String targetUserId;
@@ -28,6 +30,193 @@ class DirectChatScreen extends StatefulWidget {
 }
 
 class _DirectChatScreenState extends State<DirectChatScreen> {
+  /// Whether the signed-in user has blocked this person.
+  bool _isBlocked = false;
+
+  Future<void> _loadBlockState() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final chat = Provider.of<ChatService>(context, listen: false);
+    if (auth.token == null) return;
+    final ids = await chat.fetchBlockedUserIds(auth.token!);
+    if (!mounted) return;
+    setState(() => _isBlocked = ids.contains(widget.targetUserId));
+  }
+
+  Future<void> _confirmBlock() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final chat = Provider.of<ChatService>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await confirmAction(
+      context,
+      title: 'Block ${widget.targetUserName}?',
+      message:
+          'Neither of you will be able to message the other. You can unblock them later from this menu.',
+      confirmLabel: 'Block',
+      destructive: true,
+    );
+    if (!ok || !mounted || auth.token == null) return;
+    final error = await chat.blockUser(auth.token!, widget.targetUserId);
+    if (!mounted) return;
+    if (error == null) setState(() => _isBlocked = true);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(error ?? '${widget.targetUserName} has been blocked.'),
+      ),
+    );
+  }
+
+  Future<void> _unblock() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final chat = Provider.of<ChatService>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    if (auth.token == null) return;
+    final error = await chat.unblockUser(auth.token!, widget.targetUserId);
+    if (!mounted) return;
+    if (error == null) setState(() => _isBlocked = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(error ?? '${widget.targetUserName} has been unblocked.'),
+      ),
+    );
+  }
+
+  /// Report this person, optionally pointing at one message.
+  void _showReportUserSheet({String? messageId}) {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final reports = Provider.of<ReportService>(context, listen: false);
+    if (auth.token == null) return;
+    String category = 'HARASSMENT';
+    final reasonController = TextEditingController();
+    String? error;
+    bool submitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheet) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 24,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                messageId == null
+                    ? 'Report ${widget.targetUserName}'
+                    : 'Report this message',
+                style: const TextStyle(
+                  color: Color(0xFF012D1D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Reports go to the Voluntree safety team. The person is not told who reported them.',
+                style: TextStyle(color: Color(0xFF414844), fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                decoration: const InputDecoration(
+                  labelText: 'What is the problem?',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'HARASSMENT',
+                    child: Text('Harassment or bullying'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'INAPPROPRIATE',
+                    child: Text('Inappropriate or sexual content'),
+                  ),
+                  DropdownMenuItem(value: 'SPAM', child: Text('Spam or scam')),
+                  DropdownMenuItem(
+                    value: 'OTHER',
+                    child: Text('Something else'),
+                  ),
+                ],
+                onChanged: (v) => setSheet(() => category = v ?? category),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLines: 4,
+                maxLength: 5000,
+                decoration: InputDecoration(
+                  labelText: 'Describe what happened',
+                  hintText: 'At least $minReportReasonLength characters',
+                  errorText: error,
+                  errorMaxLines: 3,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFBA1A1A),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: submitting
+                    ? null
+                    : () async {
+                        final reason = reasonController.text.trim();
+                        if (reason.length < minReportReasonLength) {
+                          setSheet(
+                            () => error =
+                                'Please describe the problem in at least $minReportReasonLength characters.',
+                          );
+                          return;
+                        }
+                        setSheet(() {
+                          submitting = true;
+                          error = null;
+                        });
+                        final result = await reports.reportUser(
+                          token: auth.token!,
+                          userId: widget.targetUserId,
+                          category: category,
+                          reason: reason,
+                          messageId: messageId,
+                        );
+                        if (!sheetContext.mounted) return;
+                        if (result == null) {
+                          Navigator.pop(sheetContext);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Thank you. Your report has been sent to the safety team.',
+                                ),
+                              ),
+                            );
+                          }
+                        } else {
+                          setSheet(() {
+                            submitting = false;
+                            error = result;
+                          });
+                        }
+                      },
+                child: Text(submitting ? 'Sending...' : 'Send report'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(reasonController.dispose);
+  }
+
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -75,6 +264,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     if (authService.token != null) {
       chatService.initSocket(authService.token!);
       chatService.fetchChatHistory(authService.token!, widget.targetUserId);
+      _loadBlockState();
     }
   }
 
@@ -235,6 +425,29 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Safety options',
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) {
+              switch (value) {
+                case 'block':
+                  _confirmBlock();
+                case 'unblock':
+                  _unblock();
+                case 'report':
+                  _showReportUserSheet();
+              }
+            },
+            itemBuilder: (context) => [
+              if (_isBlocked)
+                const PopupMenuItem(value: 'unblock', child: Text('Unblock'))
+              else
+                const PopupMenuItem(value: 'block', child: Text('Block user')),
+              const PopupMenuItem(value: 'report', child: Text('Report user')),
+            ],
+          ),
+        ],
         elevation: 1,
       ),
       body: ResponsiveCenter(
@@ -733,9 +946,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  msg.type == MessageType.VOICE_NOTE
-                      ? 'Voice note (0:12)'
-                      : 'Audio track',
+                  msg.type == MessageType.VOICE_NOTE ? 'Voice note' : 'Audio',
                   style: const TextStyle(color: Colors.white70, fontSize: 10),
                 ),
               ],
@@ -764,9 +975,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  const Text(
-                    '2.4 MB • PDF Document',
-                    style: TextStyle(color: Colors.white54, fontSize: 10),
+                  Text(
+                    msg.type == MessageType.PDF ? 'PDF document' : 'Document',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ],
               ),
@@ -783,12 +994,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
               decoration: BoxDecoration(
                 color: Colors.black38,
                 borderRadius: BorderRadius.circular(8),
-                image: const DecorationImage(
-                  image: NetworkImage(
-                    'https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=250',
-                  ),
-                  fit: BoxFit.cover,
-                ),
               ),
               child: const Center(
                 child: Icon(Icons.location_on, color: Colors.red, size: 32),
@@ -830,11 +1035,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    '+91 98765 43210',
-                    style: TextStyle(color: Colors.white54, fontSize: 10),
                   ),
                 ],
               ),
@@ -888,13 +1088,15 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
   }
 
-  String _formatTime(DateTime date) {
+  String _formatTime(DateTime utcOrLocal) {
+    final date = utcOrLocal.toLocal();
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
   }
 
-  Widget _buildDateHeader(DateTime date) {
+  Widget _buildDateHeader(DateTime utcOrLocal) {
+    final date = utcOrLocal.toLocal();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -1056,84 +1258,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     );
   }
 
-  Future<void> _shareContact() async {
-    if (!kIsWeb) {
-      final status = await Permission.contacts.request();
-      if (!status.isGranted) {
-        _showPermissionDeniedDialog('Contacts');
-        return;
-      }
-    }
-
-    final nameController = TextEditingController();
-    final phoneController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          title: const Text(
-            'Share Contact',
-            style: TextStyle(color: Colors.white, fontSize: 16),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Contact Name',
-                  hintStyle: TextStyle(color: Color(0xFF64748B)),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white30),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Phone Number',
-                  hintStyle: TextStyle(color: Color(0xFF64748B)),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white30),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0E6C4A),
-              ),
-              onPressed: () {
-                final name = nameController.text.trim();
-                final phone = phoneController.text.trim();
-                if (name.isNotEmpty && phone.isNotEmpty) {
-                  Navigator.pop(context);
-                  _send(
-                    type: MessageType.CONTACT,
-                    customContent: '$name: $phone',
-                  );
-                }
-              },
-              child: const Text('Share', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   void _uploadAndSendAttachment({
     required Uint8List bytes,
     required MessageType type,
@@ -1223,7 +1347,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
               horizontal: 24.0,
               vertical: 20.0,
             ),
-            // Wrap, not Row: six options do not fit on one line at 375 px.
+            // Wrap, not Row: the options do not fit on one line at 375 px.
+            // Contact sharing was removed: it needed a contacts permission
+            // the app never declared, for a form that never read contacts.
             // Document, location, voice note and contact sharing were all
             // implemented but reachable from nowhere — the sheet only ever
             // offered photo and video.
@@ -1265,15 +1391,6 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                   () {
                     Navigator.pop(context);
                     _recordVoiceNote();
-                  },
-                ),
-                _buildAttachmentOption(
-                  Icons.person,
-                  'Contact',
-                  Colors.teal,
-                  () {
-                    Navigator.pop(context);
-                    _shareContact();
                   },
                 ),
               ],
@@ -1396,13 +1513,37 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                   onTap: () async {
                     Navigator.pop(context);
                     final chatService = Provider.of<ChatService>(
-                      context,
+                      this.context,
                       listen: false,
                     );
+                    final ok = await confirmAction(
+                      this.context,
+                      title: 'Delete this message?',
+                      message:
+                          'It will be replaced with "message deleted" for both of you.',
+                      confirmLabel: 'Delete',
+                      destructive: true,
+                    );
+                    if (!ok || !mounted) return;
                     await chatService.deleteMessage(authService.token!, msg.id);
                   },
                 ),
               ],
+              if (!isMe && !msg.isDeleted)
+                ListTile(
+                  leading: const Icon(
+                    Icons.flag_outlined,
+                    color: Colors.redAccent,
+                  ),
+                  title: const Text(
+                    'Report',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showReportUserSheet(messageId: msg.id);
+                  },
+                ),
             ],
           ),
         );
