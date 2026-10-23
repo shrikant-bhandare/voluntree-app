@@ -497,9 +497,7 @@ class AuthService extends ChangeNotifier {
         Uri.parse('$baseUrl/ngos/upload'),
       );
       request.headers['Authorization'] = 'Bearer $_token';
-      request.files.add(
-        http.MultipartFile.fromBytes('file', bytes, filename: filename),
-      );
+      request.files.add(typedMultipartFile('file', bytes, filename));
       final response = await http.Response.fromStream(await request.send());
       if (response.statusCode == 201) {
         return jsonDecode(response.body)['url'] as String?;
@@ -580,9 +578,7 @@ class AuthService extends ChangeNotifier {
       );
       request.headers['Authorization'] = 'Bearer $_token';
 
-      request.files.add(
-        http.MultipartFile.fromBytes('file', bytes, filename: filename),
-      );
+      request.files.add(typedMultipartFile('file', bytes, filename));
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);

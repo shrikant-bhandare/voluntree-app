@@ -8,6 +8,10 @@ library;
 
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
+
 /// Accepts both the paginated `{data: [...]}` envelope and a bare array, so
 /// the client keeps working against either backend generation.
 List<dynamic> unwrapList(dynamic decoded) {
@@ -74,3 +78,30 @@ dynamic tryDecodeJson(String body) {
     return null;
   }
 }
+
+/// Document types the chat picker offers. Each must map to a MIME type the
+/// API's attachment filter accepts (PDF, Word, and Office Open XML files);
+/// plain text and legacy .xls are rejected there, so they are not offered.
+const chatDocumentExtensions = ['pdf', 'doc', 'docx', 'xlsx'];
+
+/// MIME type for an upload: sniffed from the file's leading bytes, falling
+/// back to the filename's extension.
+String uploadContentType(List<int> bytes, String filename) =>
+    lookupMimeType(filename, headerBytes: bytes) ?? 'application/octet-stream';
+
+/// A multipart file part that carries the file's real Content-Type.
+///
+/// `http.MultipartFile.fromBytes` labels every part
+/// `application/octet-stream` unless told otherwise, and the API's upload
+/// filters accept only listed image and document types, so an untyped part
+/// is rejected with 400 before it is stored (F11).
+http.MultipartFile typedMultipartFile(
+  String field,
+  List<int> bytes,
+  String filename,
+) => http.MultipartFile.fromBytes(
+  field,
+  bytes,
+  filename: filename,
+  contentType: MediaType.parse(uploadContentType(bytes, filename)),
+);

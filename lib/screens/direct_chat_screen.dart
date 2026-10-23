@@ -10,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import '../services/auth_service.dart';
+import '../services/api_helpers.dart' show chatDocumentExtensions;
 import '../services/chat_service.dart';
 import '../widgets/responsive.dart';
 import '../widgets/confirm_dialog.dart';
@@ -1193,7 +1194,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   Future<void> _pickDocument() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+      allowedExtensions: chatDocumentExtensions,
     );
     if (file == null) return;
     // readAsBytes resolves from bytes or path, including on web.

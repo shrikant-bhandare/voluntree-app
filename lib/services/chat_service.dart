@@ -823,9 +823,7 @@ class ChatService extends ChangeNotifier {
         Uri.parse('$baseUrl/messages/upload'),
       );
       request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(
-        http.MultipartFile.fromBytes('file', bytes, filename: filename),
-      );
+      request.files.add(typedMultipartFile('file', bytes, filename));
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
