@@ -24,22 +24,20 @@ class EventFeedScreen extends StatefulWidget {
 }
 
 class _EventFeedScreenState extends State<EventFeedScreen> {
-  bool _isInit = true;
-
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_isInit) {
+  void initState() {
+    super.initState();
+    // Both fetches call notifyListeners() before their first await. Starting
+    // them during build notified the providers mid-build; release builds then
+    // left the Posts tab on its spinner after the fetch had finished (F7).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final auth = Provider.of<AuthService>(context, listen: false);
-      if (auth.token != null) {
-        Provider.of<PostsService>(
-          context,
-          listen: false,
-        ).fetchPosts(auth.token!);
-        Provider.of<EventService>(context, listen: false).fetchEvents();
-      }
-      _isInit = false;
-    }
+      final token = auth.token;
+      if (token == null) return;
+      Provider.of<PostsService>(context, listen: false).fetchPosts(token);
+      Provider.of<EventService>(context, listen: false).fetchEvents();
+    });
   }
 
   Future<void> _refreshFeed() async {
