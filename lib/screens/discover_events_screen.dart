@@ -725,13 +725,13 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFD8704).withOpacity(0.15),
+                              color: const Color(0xFFC9A24A).withOpacity(0.15),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Text(
                               'SPONSORED',
                               style: TextStyle(
-                                color: Color(0xFFFD8704),
+                                color: Color(0xFFC9A24A),
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -791,7 +791,7 @@ class _DiscoverEventsScreenState extends State<DiscoverEventsScreen> {
                                   volunteersNeeded: event.volunteersNeeded,
                                   approvedCount: event.approvedCount,
                                 )
-                                ? const Color(0xFFEF4444)
+                                ? const Color(0xFFBA1A1A)
                                 : theme.colorScheme.primary,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,

@@ -327,7 +327,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
                                   children: [
                                     const Icon(
                                       Icons.location_on,
-                                      color: Color(0xFF006C48),
+                                      color: Color(0xFF0E6C4A),
                                       size: 18,
                                     ),
                                     const SizedBox(width: 6),
@@ -532,7 +532,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
                       decoration: BoxDecoration(
                         color: const Color(0xFFF4FAFD),
                         border: const Border(
-                          left: BorderSide(color: Color(0xFF006C48), width: 4),
+                          left: BorderSide(color: Color(0xFF0E6C4A), width: 4),
                         ),
                         borderRadius: BorderRadius.circular(8),
                       ),

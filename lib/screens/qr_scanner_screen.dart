@@ -205,14 +205,14 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF1B4332),
           title: Row(
             children: [
               Icon(
                 scanType == 'CHECK_IN' ? Icons.check_circle : Icons.exit_to_app,
                 color: scanType == 'CHECK_IN'
-                    ? const Color(0xFF10B981)
-                    : const Color(0xFFEC4899),
+                    ? const Color(0xFF6FCF9E)
+                    : const Color(0xFFC9A24A),
               ),
               const SizedBox(width: 8),
               Text(
@@ -242,14 +242,14 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               const SizedBox(height: 12),
               Text(
                 'Time: $timeStr',
-                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                style: const TextStyle(color: Color(0xFF86AF99), fontSize: 12),
               ),
               if (scanType == 'CHECK_OUT') ...[
                 const SizedBox(height: 8),
                 Text(
                   'Hours Logged: $hours hrs',
                   style: const TextStyle(
-                    color: Color(0xFF10B981),
+                    color: Color(0xFF6FCF9E),
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
@@ -257,7 +257,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 Text(
                   'Reputation points awarded: +$points',
                   style: const TextStyle(
-                    color: Color(0xFFEAB308),
+                    color: Color(0xFFC9A24A),
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
@@ -278,7 +278,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               child: const Text(
                 'OK',
                 style: TextStyle(
-                  color: Color(0xFF6366F1),
+                  color: Color(0xFF6FCF9E),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -292,9 +292,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF012D1D),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF1B4332),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
@@ -315,9 +315,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               Container(
                 height: 280,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: const Color(0xFF1B4332),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF334155), width: 2),
+                  border: Border.all(color: const Color(0xFF24543F), width: 2),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(18),
@@ -328,7 +328,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                         const Center(
                           child: CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              Color(0xFF6366F1),
+                              Color(0xFF6FCF9E),
                             ),
                           ),
                         )
@@ -391,7 +391,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                               children: [
                                 const Icon(
                                   Icons.camera_alt_outlined,
-                                  color: Color(0xFF94A3B8),
+                                  color: Color(0xFF86AF99),
                                   size: 44,
                                 ),
                                 const SizedBox(height: 12),
@@ -408,7 +408,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                                 const Text(
                                   'Please enable camera access to scan QR passes.',
                                   style: TextStyle(
-                                    color: Color(0xFF94A3B8),
+                                    color: Color(0xFF86AF99),
                                     fontSize: 10,
                                   ),
                                   textAlign: TextAlign.center,
@@ -424,7 +424,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                                     }
                                   },
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF6366F1),
+                                    backgroundColor: const Color(0xFF6FCF9E),
                                     foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 14,
@@ -458,10 +458,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                         child: Container(
                           height: 3,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEC4899),
+                            color: const Color(0xFFC9A24A),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFEC4899).withOpacity(0.6),
+                                color: const Color(0xFFC9A24A).withOpacity(0.6),
                                 blurRadius: 8,
                               ),
                             ],
@@ -510,9 +510,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                     return Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
+                        color: const Color(0xFF1B4332),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF334155)),
+                        border: Border.all(color: const Color(0xFF24543F)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -529,7 +529,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                           const Text(
                             "Choose the drive, then type the 8-character code shown under the volunteer's QR pass.",
                             style: TextStyle(
-                              color: Color(0xFFCBD5E1),
+                              color: Color(0xFFC1C8C2),
                               fontSize: 13,
                             ),
                           ),
@@ -540,7 +540,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                             const Text(
                               'You have no open drives to check volunteers in to.',
                               style: TextStyle(
-                                color: Color(0xFFCBD5E1),
+                                color: Color(0xFFC1C8C2),
                                 fontSize: 13,
                               ),
                             )
@@ -549,7 +549,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                               key: ValueKey(selected),
                               initialValue: selected,
                               isExpanded: true,
-                              dropdownColor: const Color(0xFF1E293B),
+                              dropdownColor: const Color(0xFF1B4332),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
@@ -557,10 +557,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                               decoration: InputDecoration(
                                 labelText: 'Drive',
                                 labelStyle: const TextStyle(
-                                  color: Color(0xFFCBD5E1),
+                                  color: Color(0xFFC1C8C2),
                                 ),
                                 filled: true,
-                                fillColor: const Color(0xFF0F172A),
+                                fillColor: const Color(0xFF012D1D),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,
@@ -593,16 +593,16 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                               decoration: InputDecoration(
                                 labelText: 'Pass code',
                                 labelStyle: const TextStyle(
-                                  color: Color(0xFFCBD5E1),
+                                  color: Color(0xFFC1C8C2),
                                 ),
                                 hintText: 'XXXX-XXXX',
                                 hintStyle: const TextStyle(
-                                  color: Color(0xFF64748B),
+                                  color: Color(0xFF5E8271),
                                 ),
                                 errorText: _codeError,
                                 errorMaxLines: 3,
                                 filled: true,
-                                fillColor: const Color(0xFF0F172A),
+                                fillColor: const Color(0xFF012D1D),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide.none,

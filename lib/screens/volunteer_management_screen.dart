@@ -508,7 +508,7 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                               const SizedBox(width: 4),
                               const Icon(
                                 Icons.check_circle,
-                                color: Color(0xFF006C48),
+                                color: Color(0xFF0E6C4A),
                                 size: 14,
                               ),
                             ],

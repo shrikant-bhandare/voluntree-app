@@ -380,9 +380,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF012D1D),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF1B4332),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
@@ -408,7 +408,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                     color:
                         (chatService.userPresenceMap[widget.targetUserId] ??
                             false)
-                        ? const Color(0xFF10B981)
+                        ? const Color(0xFF6FCF9E)
                         : Colors.grey,
                   ),
                 ),
@@ -418,7 +418,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       ? 'Online'
                       : 'Offline',
                   style: const TextStyle(
-                    color: Color(0xFF94A3B8),
+                    color: Color(0xFF86AF99),
                     fontSize: 10,
                   ),
                 ),
@@ -550,7 +550,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                         chatService.typingStatusMap[widget.targetUserId]!,
                       ),
                       style: const TextStyle(
-                        color: Color(0xFF94A3B8),
+                        color: Color(0xFF86AF99),
                         fontSize: 11,
                         fontStyle: FontStyle.italic,
                       ),
@@ -564,9 +564,9 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: const BoxDecoration(
-                color: Color(0xFF1E293B),
+                color: Color(0xFF1B4332),
                 border: Border(
-                  top: BorderSide(color: Color(0xFF334155), width: 1),
+                  top: BorderSide(color: Color(0xFF24543F), width: 1),
                 ),
               ),
               child: Column(
@@ -582,7 +582,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                       ),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
+                        color: const Color(0xFF012D1D),
                         borderRadius: BorderRadius.circular(8),
                         border: const Border(
                           left: BorderSide(color: Color(0xFF0E6C4A), width: 3),
@@ -649,10 +649,10 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
                           decoration: InputDecoration(
                             hintText: 'Type your message...',
                             hintStyle: const TextStyle(
-                              color: Color(0xFF64748B),
+                              color: Color(0xFF5E8271),
                             ),
                             filled: true,
-                            fillColor: const Color(0xFF0F172A),
+                            fillColor: const Color(0xFF012D1D),
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 10,
@@ -714,8 +714,8 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
           ),
           decoration: BoxDecoration(
             color: msg.isDeleted
-                ? const Color(0xFF1E293B).withOpacity(0.5)
-                : (isMe ? const Color(0xFF0E6C4A) : const Color(0xFF1E293B)),
+                ? const Color(0xFF1B4332).withOpacity(0.5)
+                : (isMe ? const Color(0xFF0E6C4A) : const Color(0xFF1B4332)),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(16),
               topRight: const Radius.circular(16),
@@ -725,7 +725,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             border: Border.all(
               color: msg.isDeleted
                   ? Colors.grey.withOpacity(0.2)
-                  : (isMe ? const Color(0xFF0E6C4A) : const Color(0xFF334155)),
+                  : (isMe ? const Color(0xFF0E6C4A) : const Color(0xFF24543F)),
             ),
           ),
           child: Column(
@@ -1083,7 +1083,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       case MessageStatus.DELIVERED:
         return const Icon(Icons.done_all, color: Colors.white54, size: 10);
       case MessageStatus.READ:
-        return const Icon(Icons.done_all, color: Color(0xFF3B82F6), size: 10);
+        return const Icon(Icons.done_all, color: Color(0xFFA0F4C8), size: 10);
       case MessageStatus.FAILED:
         return const Icon(Icons.error_outline, color: Colors.red, size: 10);
     }
@@ -1132,14 +1132,14 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: const Color(0xFF1B4332),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF334155), width: 1),
+          border: Border.all(color: const Color(0xFF24543F), width: 1),
         ),
         child: Text(
           label,
           style: const TextStyle(
-            color: Color(0xFF94A3B8),
+            color: Color(0xFF86AF99),
             fontSize: 11,
             fontWeight: FontWeight.bold,
             letterSpacing: 0.5,
@@ -1298,14 +1298,14 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF1B4332),
           title: Text(
             '$feature Permission Required',
             style: const TextStyle(color: Colors.white, fontSize: 16),
           ),
           content: Text(
             'This application needs $feature access to share attachments.',
-            style: const TextStyle(color: Color(0xFF94A3B8)),
+            style: const TextStyle(color: Color(0xFF86AF99)),
           ),
           actions: [
             TextButton(
@@ -1337,7 +1337,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
   void _showAttachmentSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: const Color(0xFF1B4332),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1434,7 +1434,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: const Color(0xFF1B4332),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -1558,7 +1558,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: const Color(0xFF1B4332),
           title: const Text(
             'Edit Message',
             style: TextStyle(color: Colors.white, fontSize: 16),
@@ -1568,7 +1568,7 @@ class _DirectChatScreenState extends State<DirectChatScreen> {
             style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
               hintText: 'Enter updated message...',
-              hintStyle: TextStyle(color: Color(0xFF64748B)),
+              hintStyle: TextStyle(color: Color(0xFF5E8271)),
               enabledBorder: UnderlineInputBorder(
                 borderSide: BorderSide(color: Colors.white30),
               ),
@@ -1679,7 +1679,7 @@ class _VoiceRecordingDialogState extends State<_VoiceRecordingDialog> {
     final secondStr = (_seconds % 60).toString().padLeft(2, '0');
 
     return Dialog(
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: const Color(0xFF1B4332),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(24.0),

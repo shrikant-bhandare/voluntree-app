@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'theme/app_theme.dart';
+import 'theme/brand.dart';
+import 'widgets/voluntree_logo.dart';
 import 'widgets/responsive.dart';
 import 'services/auth_service.dart';
 import 'services/event_service.dart';
@@ -74,53 +76,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lightTextTheme = GoogleFonts.plusJakartaSansTextTheme(
-      ThemeData.light().textTheme,
-    );
-
     return MaterialApp(
       title: 'Voluntree',
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
-      theme: ThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(
-          0xFFF4FAFD,
-        ), // Soft green-blue tint
-        primaryColor: const Color(0xFF012D1D), // Forest Green
-        colorScheme: const ColorScheme.light(
-          primary: Color(0xFF012D1D),
-          primaryContainer: Color(0xFF1B4332),
-          secondary: Color(0xFF0E6C4A),
-          secondaryContainer: Color(0xFFA0F4C8),
-          surface: Color(0xFFFFFFFF),
-          surfaceContainer: Color(0xFFE8EFF1),
-          onPrimary: Colors.white,
-          onSecondary: Colors.white,
-          onSurface: Color(0xFF161D1F),
-          error: Color(0xFFBA1A1A),
-        ),
-        textTheme: lightTextTheme.copyWith(
-          displayLarge: GoogleFonts.plusJakartaSans(
-            textStyle: lightTextTheme.displayLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF012D1D),
-            ),
-          ),
-          headlineMedium: GoogleFonts.plusJakartaSans(
-            textStyle: lightTextTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF012D1D),
-            ),
-          ),
-          bodyMedium: GoogleFonts.plusJakartaSans(
-            textStyle: lightTextTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF161D1F),
-            ),
-          ),
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
       home: const AuthGate(),
     );
   }
@@ -137,11 +97,25 @@ class AuthGate extends StatelessWidget {
     if (authService.isLoading &&
         authService.token != null &&
         authService.currentUser == null) {
+      // Restoring a saved session: the brand, not a bare spinner.
       return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
+        backgroundColor: Brand.mist,
         body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              VoluntreeBadge(size: 88),
+              SizedBox(height: 24),
+              VoluntreeWordmark(fontSize: 30),
+              SizedBox(height: 32),
+              SizedBox(
+                width: 120,
+                child: LinearProgressIndicator(
+                  minHeight: 3,
+                  borderRadius: BorderRadius.all(Radius.circular(2)),
+                ),
+              ),
+            ],
           ),
         ),
       );

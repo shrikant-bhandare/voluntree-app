@@ -5,6 +5,7 @@ import '../config.dart';
 import '../services/auth_service.dart';
 import '../widgets/responsive.dart';
 import 'register_screen.dart';
+import '../theme/brand.dart';
 
 /// Seconds before another code may be requested from the OTP screen.
 const int otpResendCooldownSeconds = 60;
@@ -161,10 +162,18 @@ class _OtpScreenState extends State<OtpScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Center(
-                  child: Icon(
-                    Icons.security_outlined,
-                    size: 72,
-                    color: theme.colorScheme.secondary,
+                  child: Container(
+                    width: 76,
+                    height: 76,
+                    decoration: const BoxDecoration(
+                      color: Brand.mintWash,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.verified_user_outlined,
+                      size: 36,
+                      color: Brand.growth,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -192,23 +201,7 @@ class _OtpScreenState extends State<OtpScreen> {
                 // Verification Card
                 Container(
                   padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(0xFFE8EFF1),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.primaryContainer.withOpacity(
-                          0.04,
-                        ),
-                        blurRadius: 24,
-                        offset: const Offset(0, 12),
-                      ),
-                    ],
-                  ),
+                  decoration: Brand.cardDecoration,
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -232,38 +225,9 @@ class _OtpScreenState extends State<OtpScreen> {
                               color: Color(0xFF717973),
                               letterSpacing: 8,
                             ),
-                            filled: true,
-                            fillColor: const Color(0xFFF4FAFD),
+
                             contentPadding: const EdgeInsets.symmetric(
                               vertical: 16,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFE8EFF1),
-                                width: 1,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 2,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 1.5,
-                              ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 2,
-                              ),
                             ),
                           ),
                           validator: (value) {
@@ -276,15 +240,6 @@ class _OtpScreenState extends State<OtpScreen> {
                         const SizedBox(height: 24),
                         ElevatedButton(
                           onPressed: isLoading ? null : _verify,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
                           child: isLoading
                               ? const SizedBox(
                                   height: 20,

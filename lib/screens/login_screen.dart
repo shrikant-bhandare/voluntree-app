@@ -6,6 +6,8 @@ import '../services/sso_service.dart';
 import '../utils/policy_links.dart';
 import 'otp_screen.dart';
 import 'register_screen.dart';
+import '../theme/brand.dart';
+import '../widgets/voluntree_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -133,53 +135,16 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Logo or App Icon
-                Center(
-                  child: Container(
-                    height: 80,
-                    width: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          theme.colorScheme.primaryContainer,
-                          theme.colorScheme.secondary,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: theme.colorScheme.primary.withOpacity(0.15),
-                          blurRadius: 16,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.volunteer_activism,
-                      size: 40,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Voluntree',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                const Center(child: VoluntreeBadge(size: 84)),
+                const SizedBox(height: 22),
+                const Center(child: VoluntreeWordmark(fontSize: 34)),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Connect. Support. Impact.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF717973), // Voluntree Outline Grey
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Brand.inkMuted,
                     fontWeight: FontWeight.w500,
+                    letterSpacing: 0.3,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -188,25 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Login Form Card
                 Container(
                   padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(
-                        0xFFE8EFF1,
-                      ), // Voluntree Surface Container border
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.primaryContainer.withOpacity(
-                          0.04,
-                        ),
-                        blurRadius: 24,
-                        offset: const Offset(0, 12),
-                      ),
-                    ],
-                  ),
+                  decoration: Brand.cardDecoration,
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -214,9 +161,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Text(
                           'Secure Login',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
+                          style: theme.textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "We'll send you a one-time code.",
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Brand.inkMuted,
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -227,45 +178,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             // Kept short so it does not truncate at 375 px, where it was
                             // rendering as "Enter Email or Mobile Nu...".
                             hintText: 'Email or mobile number',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF717973),
-                            ),
+
                             prefixIcon: Icon(
                               Icons.person_outline,
                               color: theme.colorScheme.secondary,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF4FAFD),
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFE8EFF1),
-                                width: 1,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 2,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 1.5,
-                              ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 2,
-                              ),
                             ),
                           ),
                           validator: (value) {
@@ -278,15 +194,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 24),
                         ElevatedButton(
                           onPressed: isLoading ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
                           child: isLoading
                               ? const SizedBox(
                                   height: 20,
@@ -352,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: const [
                       Expanded(
                         child: Divider(
-                          color: Color(0xFFD0D7DE),
+                          color: Color(0xFFC1C8C2),
                           thickness: 1,
                           endIndent: 16,
                         ),
@@ -360,7 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         'OR SIGN UP WITH',
                         style: TextStyle(
-                          color: Color(0xFF6A737D),
+                          color: Color(0xFF717973),
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.2,
@@ -368,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       Expanded(
                         child: Divider(
-                          color: Color(0xFFD0D7DE),
+                          color: Color(0xFFC1C8C2),
                           thickness: 1,
                           indent: 16,
                         ),
@@ -386,7 +293,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: () => _handleSsoLogin(context, 'Google'),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(
-                              color: Color(0xFFD0D7DE),
+                              color: Color(0xFFC1C8C2),
                               width: 1.2,
                             ),
                             shape: RoundedRectangleBorder(
@@ -438,7 +345,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                   text: TextSpan(
                     style: const TextStyle(
-                      color: Color(0xFF57606A),
+                      color: Color(0xFF414844),
                       fontSize: 12,
                       height: 1.5,
                     ),

@@ -72,7 +72,7 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
         user?.userType == 'ORGANIZER' || user?.userType == 'ADMIN';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF4FAFD),
       appBar: AppBar(
         title: Text(
           'Community Moments',
@@ -370,7 +370,7 @@ class _PostCardState extends State<PostCard> {
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
                         return Container(
-                          color: const Color(0xFFF1F5F9),
+                          color: const Color(0xFFE8EFF1),
                           child: const Center(
                             child: CircularProgressIndicator(),
                           ),
@@ -1019,9 +1019,9 @@ class _CreatePostWidgetState extends State<CreatePostWidget> {
               child: Container(
                 height: 200,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: const Color(0xFFE8EFF1),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                  border: Border.all(color: const Color(0xFFC1C8C2)),
                   image: _uploadedImageUrl != null
                       ? DecorationImage(
                           image: NetworkImage(_uploadedImageUrl!),

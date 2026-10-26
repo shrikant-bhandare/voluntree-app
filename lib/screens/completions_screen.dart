@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/attendance_service.dart';
 import '../widgets/responsive.dart';
 import '../utils/file_save.dart';
+import '../theme/brand.dart';
 
 /// Hands the PDF to the user: the system "Save to…" picker on Android/iOS
 /// (the old app-private documents folder was invisible in Files) and a
@@ -55,63 +55,49 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
     final auth = Provider.of<AuthService>(context);
     final attService = Provider.of<AttendanceService>(context);
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          'Completed Drives',
-          style: GoogleFonts.plusJakartaSans(
-            textStyle: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Completed Drives')),
       body: ResponsiveCenter(
         maxWidth: 840,
         child: attService.isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
-                ),
-              )
+            ? const Center(child: CircularProgressIndicator())
             : attService.history.isEmpty
             ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.emoji_events_outlined,
-                      size: 64,
-                      color: Colors.white.withOpacity(0.2),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No completed drives yet',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 88,
+                        height: 88,
+                        decoration: const BoxDecoration(
+                          color: Brand.goldContainer,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.emoji_events_outlined,
+                          size: 40,
+                          color: Brand.goldDeep,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Complete drives and check-out to earn certificates.',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
-                        fontSize: 13,
+                      const SizedBox(height: 20),
+                      Text(
+                        'No completed drives yet',
+                        style: theme.textTheme.titleLarge,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Complete drives and check-out to earn certificates.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Brand.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               )
             : ListView.builder(
@@ -125,18 +111,7 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.05)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                    decoration: Brand.cardDecoration,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -149,17 +124,15 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF6366F1,
-                                ).withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(8),
+                                color: Brand.mintWash,
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
                                 item.eventCategory,
                                 style: const TextStyle(
-                                  color: Color(0xFF818CF8),
+                                  color: Brand.mintText,
                                   fontSize: 11,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ),
@@ -167,16 +140,16 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
                               children: [
                                 const Icon(
                                   Icons.timer_outlined,
-                                  color: Colors.grey,
+                                  color: Brand.sage,
                                   size: 14,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   '${item.hoursLogged.toStringAsFixed(1)} hrs',
                                   style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+                                    color: Brand.ink,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               ],
@@ -186,40 +159,36 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
                         const SizedBox(height: 12),
                         Text(
                           item.eventTitle,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: Brand.forest,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Completed on: ${item.checkOut != null ? "${item.checkOut!.day.toString().padLeft(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][item.checkOut!.month - 1]} ${item.checkOut!.year}" : "N/A"}',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
-                            fontSize: 12,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Brand.sage,
                           ),
                         ),
-                        const Divider(color: Color(0xFF334155), height: 24),
+                        const Divider(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Row(
                               children: [
                                 const Icon(
-                                  Icons.verified_outlined,
-                                  color: Color(0xFF10B981),
-                                  size: 16,
+                                  Icons.verified_rounded,
+                                  color: Brand.gold,
+                                  size: 18,
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   'Verified Completion',
-                                  style: TextStyle(
-                                    color: const Color(
-                                      0xFF10B981,
-                                    ).withOpacity(0.9),
+                                  style: const TextStyle(
+                                    color: Brand.goldDeep,
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ],
@@ -233,11 +202,7 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
                                   context: context,
                                   barrierDismissible: false,
                                   builder: (context) => const Center(
-                                    child: CircularProgressIndicator(
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Color(0xFF6366F1),
-                                      ),
-                                    ),
+                                    child: CircularProgressIndicator(),
                                   ),
                                 );
 
@@ -278,18 +243,13 @@ class _CompletionsScreenState extends State<CompletionsScreen> {
                               ),
                               label: const Text('Certificate'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6366F1),
-                                foregroundColor: Colors.white,
+                                minimumSize: const Size(0, 40),
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                                  horizontal: 14,
                                 ),
                                 textStyle: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),

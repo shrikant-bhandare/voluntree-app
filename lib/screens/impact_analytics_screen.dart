@@ -143,7 +143,7 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
                   value: '$activeVolunteers',
                   trend: 'Unique attendees checked in',
                   icon: Icons.people_alt,
-                  accentColor: const Color(0xFFFD8704),
+                  accentColor: const Color(0xFFC9A24A),
                   theme: theme,
                 ),
                 const SizedBox(height: 16),
@@ -219,13 +219,13 @@ class _ImpactAnalyticsScreenState extends State<ImpactAnalyticsScreen> {
 
                           Color barColor = const Color(0xFF0e6c4a);
                           if (catName.contains('Support'))
-                            barColor = const Color(0xFFFD8704);
+                            barColor = const Color(0xFFC9A24A);
                           if (catName.contains('Health'))
                             barColor = const Color(0xFF012D1D);
                           if (catName.contains('Education'))
-                            barColor = const Color(0xFF2196F3);
+                            barColor = const Color(0xFF5E8271);
                           if (catName.contains('Animal'))
-                            barColor = const Color(0xFFE91E63);
+                            barColor = const Color(0xFF7A5A12);
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),

@@ -184,7 +184,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 ? 'Applied to "${_event!.title}". The organizer will review your application.'
                 : 'Applied to "${_event!.title}" as $position. The organizer will review your application.',
           ),
-          backgroundColor: const Color(0xFF006C48),
+          backgroundColor: const Color(0xFF0E6C4A),
         ),
       );
       _refreshFromApi();
@@ -253,7 +253,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     Text(
                       'Role: $position',
                       style: const TextStyle(
-                        color: Color(0xFF006C48),
+                        color: Color(0xFF0E6C4A),
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
@@ -499,14 +499,14 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: const Color(
-                                    0xFFEF4444,
+                                    0xFFBA1A1A,
                                   ).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: const Text(
                                   'Paid Stipend',
                                   style: TextStyle(
-                                    color: Color(0xFFEF4444),
+                                    color: Color(0xFFBA1A1A),
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -564,13 +564,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                     const Icon(
                                       Icons.people_outline,
                                       size: 16,
-                                      color: Color(0xFF006C48),
+                                      color: Color(0xFF0E6C4A),
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
                                       '${e.volunteersNeeded} slots requested',
                                       style: const TextStyle(
-                                        color: Color(0xFF006C48),
+                                        color: Color(0xFF0E6C4A),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -593,7 +593,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                     backgroundColor: const Color(0xFFE8EFF1),
                                     valueColor:
                                         const AlwaysStoppedAnimation<Color>(
-                                          Color(0xFF006C48),
+                                          Color(0xFF0E6C4A),
                                         ),
                                     minHeight: 6,
                                   ),
@@ -633,9 +633,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                       const SizedBox(width: 4),
                                       if (e.isOrganizerVerified)
                                         const Icon(
-                                          Icons.verified,
-                                          color: Color(0xFF006C48),
-                                          size: 14,
+                                          Icons.verified_rounded,
+                                          color: Color(0xFFC9A24A),
+                                          size: 16,
                                         ),
                                     ],
                                   ),
@@ -645,12 +645,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                         : 'Pending Verification Host',
                                     style: TextStyle(
                                       color: e.isOrganizerVerified
-                                          ? const Color(0xFF717973)
+                                          ? const Color(0xFF7A5A12)
                                           : const Color(0xFFBA1A1A),
                                       fontSize: 11,
-                                      fontWeight: e.isOrganizerVerified
-                                          ? FontWeight.normal
-                                          : FontWeight.bold,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ],
@@ -659,7 +657,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                             IconButton(
                               icon: const Icon(
                                 Icons.chat_bubble_outline,
-                                color: Color(0xFF006C48),
+                                color: Color(0xFF0E6C4A),
                               ),
                               onPressed: () {
                                 Navigator.push(
@@ -702,13 +700,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444).withOpacity(0.06),
+                              color: const Color(0xFFBA1A1A).withOpacity(0.06),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               'Compensation: ${e.compensationDetails!}',
                               style: const TextStyle(
-                                color: Color(0xFFEF4444),
+                                color: Color(0xFFBA1A1A),
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -739,7 +737,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                               Row(
                                 children: [
                                   const CircleAvatar(
-                                    backgroundColor: Color(0xFF006C48),
+                                    backgroundColor: Color(0xFF0E6C4A),
                                     radius: 18,
                                     child: Icon(
                                       Icons.location_on,
@@ -794,7 +792,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                       avatar: const Icon(
                                         Icons.my_location,
                                         size: 14,
-                                        color: Color(0xFF006C48),
+                                        color: Color(0xFF0E6C4A),
                                       ),
                                       visualDensity: VisualDensity.compact,
                                     ),
@@ -811,7 +809,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                       avatar: const Icon(
                                         Icons.explore,
                                         size: 14,
-                                        color: Color(0xFF006C48),
+                                        color: Color(0xFF0E6C4A),
                                       ),
                                       visualDensity: VisualDensity.compact,
                                     ),
@@ -835,7 +833,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF006C48),
+                                  backgroundColor: const Color(0xFF0E6C4A),
                                   foregroundColor: Colors.white,
                                   minimumSize: const Size(double.infinity, 44),
                                   shape: RoundedRectangleBorder(
@@ -1067,7 +1065,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF006C48), size: 22),
+          Icon(icon, color: const Color(0xFF0E6C4A), size: 22),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -1199,7 +1197,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF006C48)),
+          Icon(icon, size: 14, color: const Color(0xFF0E6C4A)),
           const SizedBox(width: 4),
           Text(
             text,

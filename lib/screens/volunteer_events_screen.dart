@@ -363,13 +363,13 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
                   'Unknown')
             : 'Unknown';
 
-        Color statusColor = const Color(0xFFEAB308); // Yellow
+        Color statusColor = const Color(0xFF7A5A12); // Yellow
         if (status == 'REJECTED') {
           statusColor = const Color(0xFFBA1A1A); // Red
         } else if (status == 'WAITLISTED') {
-          statusColor = const Color(0xFF3B82F6); // Blue
+          statusColor = const Color(0xFF1B4332); // Blue
         } else if (status == 'UNDER_REVIEW') {
-          statusColor = const Color(0xFFFD8704); // Orange
+          statusColor = const Color(0xFFC9A24A); // Orange
         }
 
         return Card(

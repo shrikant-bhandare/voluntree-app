@@ -50,7 +50,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         auth.currentUser?.isVerified == true;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF012D1D),
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -71,9 +71,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: const Color(0xFF6366F1),
+          indicatorColor: const Color(0xFF0E6C4A),
           labelColor: Colors.white,
-          unselectedLabelColor: const Color(0xFF64748B),
+          unselectedLabelColor: const Color(0xFF717973),
           labelStyle: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
@@ -112,7 +112,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFFEC4899)],
+                colors: [Color(0xFF0E6C4A), Color(0xFFC9A24A)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -167,10 +167,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   width: 100,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
+                    color: const Color(0xFF1B4332),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                      color: const Color(0xFF0E6C4A).withValues(alpha: 0.4),
                     ),
                   ),
                   child: Center(
@@ -190,7 +190,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           const SizedBox(height: 24),
           const Text(
             'Or enter custom amount',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+            style: TextStyle(color: Color(0xFF717973), fontSize: 13),
           ),
           const SizedBox(height: 10),
           _CustomDonateInput(auth: auth, payments: payments),
@@ -236,7 +236,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF1B4332),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Complete your payment',
@@ -252,7 +252,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: const Color(0xFF012D1D),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -260,7 +260,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   Text(
                     '₹${amount.toStringAsFixed(2)}',
                     style: const TextStyle(
-                      color: Color(0xFF6366F1),
+                      color: Color(0xFF0E6C4A),
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                     ),
@@ -269,7 +269,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   Text(
                     'Ref: $txRef',
                     style: const TextStyle(
-                      color: Color(0xFF64748B),
+                      color: Color(0xFF717973),
                       fontSize: 11,
                     ),
                   ),
@@ -280,7 +280,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             const Text(
               'You will be taken to the secure checkout page. Your payment '
               'history updates once the gateway confirms the transaction.',
-              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              style: TextStyle(color: Color(0xFF717973), fontSize: 13),
             ),
           ],
         ),
@@ -289,7 +289,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             onPressed: () => Navigator.pop(ctx),
             child: const Text(
               'Not now',
-              style: TextStyle(color: Color(0xFF64748B)),
+              style: TextStyle(color: Color(0xFF717973)),
             ),
           ),
           ElevatedButton(
@@ -328,7 +328,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
               _tabController.animateTo(2); // Jump to History
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
+              backgroundColor: const Color(0xFF0E6C4A),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -359,7 +359,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
               Icon(
                 Icons.workspace_premium_outlined,
                 size: 56,
-                color: Color(0xFF64748B),
+                color: Color(0xFF717973),
               ),
               SizedBox(height: 16),
               Text(
@@ -375,7 +375,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
               Text(
                 'Once your organization is verified by an administrator, '
                 'subscription plans appear here.',
-                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                style: TextStyle(color: Color(0xFF717973), fontSize: 13),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -400,7 +400,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           const SizedBox(height: 6),
           const Text(
             'Support Voluntree with a monthly or annual plan.',
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+            style: TextStyle(color: Color(0xFF717973), fontSize: 13),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 28),
@@ -408,7 +408,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             title: 'Monthly Plan',
             price: '₹499',
             period: '/month',
-            accent: const Color(0xFF6366F1),
+            accent: const Color(0xFF0E6C4A),
             onSubscribe: () => _handleSubscribe(auth, payments, 'MONTHLY'),
           ),
           const SizedBox(height: 16),
@@ -417,7 +417,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             price: '₹4,999',
             period: '/year',
             saving: 'Save ₹989',
-            accent: const Color(0xFFD97706),
+            accent: const Color(0xFF7A5A12),
             onSubscribe: () => _handleSubscribe(auth, payments, 'ANNUAL'),
           ),
         ],
@@ -451,9 +451,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
 
   Widget _buildHistoryTab(PaymentsService payments) {
     final typeColors = {
-      'DONATION': const Color(0xFF6366F1),
-      'PREMIUM_SUBSCRIBER': const Color(0xFFD97706),
-      'FEATURED_EVENT_FEE': const Color(0xFF10B981),
+      'DONATION': const Color(0xFF0E6C4A),
+      'PREMIUM_SUBSCRIBER': const Color(0xFF7A5A12),
+      'FEATURED_EVENT_FEE': const Color(0xFF0E6C4A),
     };
     final typeIcons = {
       'DONATION': Icons.volunteer_activism_outlined,
@@ -469,7 +469,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     if (payments.isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0E6C4A)),
         ),
       );
     }
@@ -503,7 +503,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
       itemCount: payments.history.length,
       itemBuilder: (ctx, i) {
         final record = payments.history[i];
-        final color = typeColors[record.type] ?? const Color(0xFF64748B);
+        final color = typeColors[record.type] ?? const Color(0xFF717973);
         final icon = typeIcons[record.type] ?? Icons.payment_outlined;
         final label = typeLabels[record.type] ?? record.type;
         final isSuccess = record.status == 'SUCCESS';
@@ -513,7 +513,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
+            color: const Color(0xFF1B4332),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
@@ -546,7 +546,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                       Text(
                         record.eventTitle!,
                         style: const TextStyle(
-                          color: Color(0xFF94A3B8),
+                          color: Color(0xFF717973),
                           fontSize: 11,
                         ),
                       ),
@@ -555,7 +555,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                     Text(
                       '${record.createdAt.day.toString().padLeft(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][record.createdAt.month - 1]} ${record.createdAt.year}',
                       style: const TextStyle(
-                        color: Color(0xFF475569),
+                        color: Color(0xFF414844),
                         fontSize: 11,
                       ),
                     ),
@@ -581,10 +581,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                     ),
                     decoration: BoxDecoration(
                       color: isSuccess
-                          ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                          ? const Color(0xFF0E6C4A).withValues(alpha: 0.15)
                           : isPending
-                          ? const Color(0xFFEAB308).withValues(alpha: 0.15)
-                          : const Color(0xFFEF4444).withValues(alpha: 0.15),
+                          ? const Color(0xFF7A5A12).withValues(alpha: 0.15)
+                          : const Color(0xFFBA1A1A).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -593,10 +593,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                         fontSize: 9,
                         fontWeight: FontWeight.bold,
                         color: isSuccess
-                            ? const Color(0xFF10B981)
+                            ? const Color(0xFF0E6C4A)
                             : isPending
-                            ? const Color(0xFFEAB308)
-                            : const Color(0xFFEF4444),
+                            ? const Color(0xFF7A5A12)
+                            : const Color(0xFFBA1A1A),
                       ),
                     ),
                   ),
@@ -632,7 +632,7 @@ class _PlanCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: const Color(0xFF1B4332),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
@@ -657,13 +657,13 @@ class _PlanCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    color: const Color(0xFF0E6C4A).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     saving!,
                     style: const TextStyle(
-                      color: Color(0xFF10B981),
+                      color: Color(0xFF0E6C4A),
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -686,11 +686,11 @@ class _PlanCard extends StatelessWidget {
               ),
               Text(
                 period,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                style: const TextStyle(color: Color(0xFF717973), fontSize: 13),
               ),
             ],
           ),
-          const Divider(color: Color(0xFF334155), height: 24),
+          const Divider(color: Color(0xFF24543F), height: 24),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -746,25 +746,25 @@ class _CustomDonateInputState extends State<_CustomDonateInput> {
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'Enter amount (e.g. 750)',
-              hintStyle: const TextStyle(color: Color(0xFF475569)),
+              hintStyle: const TextStyle(color: Color(0xFF414844)),
               prefixText: '₹ ',
               prefixStyle: const TextStyle(
-                color: Color(0xFF6366F1),
+                color: Color(0xFF0E6C4A),
                 fontWeight: FontWeight.bold,
               ),
               filled: true,
-              fillColor: const Color(0xFF1E293B),
+              fillColor: const Color(0xFF1B4332),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF334155)),
+                borderSide: const BorderSide(color: Color(0xFF24543F)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF334155)),
+                borderSide: const BorderSide(color: Color(0xFF24543F)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF6366F1)),
+                borderSide: const BorderSide(color: Color(0xFF0E6C4A)),
               ),
             ),
           ),
@@ -787,7 +787,7 @@ class _CustomDonateInputState extends State<_CustomDonateInput> {
                 ?._handleDonate(widget.auth, widget.payments, amount);
           },
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF6366F1),
+            backgroundColor: const Color(0xFF0E6C4A),
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             shape: RoundedRectangleBorder(

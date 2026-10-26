@@ -193,7 +193,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             content: Text(
               'Fetched GPS Coordinates: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}',
             ),
-            backgroundColor: const Color(0xFF006C48),
+            backgroundColor: const Color(0xFF0E6C4A),
           ),
         );
       }
@@ -287,16 +287,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   Navigator.pop(ctx);
                   _getCurrentLocation();
                 },
-                icon: const Icon(Icons.my_location, color: Color(0xFF006C48)),
+                icon: const Icon(Icons.my_location, color: Color(0xFF0E6C4A)),
                 label: const Text(
                   'Use My Current GPS Position',
                   style: TextStyle(
-                    color: Color(0xFF006C48),
+                    color: Color(0xFF0E6C4A),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFF006C48)),
+                  side: const BorderSide(color: Color(0xFF0E6C4A)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -317,7 +317,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                 (v) => ListTile(
                   leading: const CircleAvatar(
                     backgroundColor: Color(0xFFE8EFF1),
-                    child: Icon(Icons.location_on, color: Color(0xFF006C48)),
+                    child: Icon(Icons.location_on, color: Color(0xFF0E6C4A)),
                   ),
                   title: Text(
                     v['name'] as String,
@@ -342,7 +342,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Selected venue: ${v['name']}'),
-                        backgroundColor: const Color(0xFF006C48),
+                        backgroundColor: const Color(0xFF0E6C4A),
                       ),
                     );
                   },
@@ -472,7 +472,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Photo uploaded and added successfully!'),
-                backgroundColor: Color(0xFF006C48),
+                backgroundColor: Color(0xFF0E6C4A),
               ),
             );
             return;
@@ -852,7 +852,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF006C48),
+                backgroundColor: const Color(0xFF0E6C4A),
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
@@ -906,7 +906,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF006C48),
+                backgroundColor: const Color(0xFF0E6C4A),
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
@@ -1150,7 +1150,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                   children: [
                                     const Icon(
                                       Icons.image_outlined,
-                                      color: Color(0xFF006C48),
+                                      color: Color(0xFF0E6C4A),
                                       size: 36,
                                     ),
                                     const SizedBox(height: 8),
@@ -1356,7 +1356,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                               ),
                               Switch(
                                 value: _isOnline,
-                                activeColor: const Color(0xFF006C48),
+                                activeColor: const Color(0xFF0E6C4A),
                                 onChanged: (v) => setState(() => _isOnline = v),
                               ),
                             ],
@@ -1377,7 +1377,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                           suffixIcon: IconButton(
                             icon: const Icon(
                               Icons.map,
-                              color: Color(0xFF006C48),
+                              color: Color(0xFF0E6C4A),
                             ),
                             tooltip: 'Pick / Find Location on Map',
                             onPressed: () => _showLocationPickerModal(context),
@@ -1422,14 +1422,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                   : const Icon(
                                       Icons.my_location,
                                       size: 16,
-                                      color: Color(0xFF006C48),
+                                      color: Color(0xFF0E6C4A),
                                     ),
                               label: Text(
                                 _isGettingLocation
                                     ? 'Fetching GPS...'
                                     : 'Get Current GPS Location',
                                 style: const TextStyle(
-                                  color: Color(0xFF006C48),
+                                  color: Color(0xFF0E6C4A),
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1607,7 +1607,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                         const Icon(
                                           Icons.calendar_today,
                                           size: 16,
-                                          color: Color(0xFF006C48),
+                                          color: Color(0xFF0E6C4A),
                                         ),
                                       ],
                                     ),
@@ -1656,7 +1656,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                         const Icon(
                                           Icons.access_time,
                                           size: 16,
-                                          color: Color(0xFF006C48),
+                                          color: Color(0xFF0E6C4A),
                                         ),
                                       ],
                                     ),
@@ -1701,7 +1701,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                                         const Icon(
                                           Icons.access_time,
                                           size: 16,
-                                          color: Color(0xFF006C48),
+                                          color: Color(0xFF0E6C4A),
                                         ),
                                       ],
                                     ),
@@ -1836,7 +1836,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                           ),
                           Switch(
                             value: _isPaid,
-                            activeColor: const Color(0xFF006C48),
+                            activeColor: const Color(0xFF0E6C4A),
                             onChanged: (v) => setState(() => _isPaid = v),
                           ),
                         ],
@@ -1941,18 +1941,18 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                               icon: const Icon(
                                 Icons.add,
                                 size: 16,
-                                color: Color(0xFF006C48),
+                                color: Color(0xFF0E6C4A),
                               ),
                               label: const Text(
                                 'Add Custom Position',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFF006C48),
+                                  color: Color(0xFF0E6C4A),
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(
-                                  color: Color(0xFF006C48),
+                                  color: Color(0xFF0E6C4A),
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),
@@ -2031,18 +2031,18 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                               icon: const Icon(
                                 Icons.add,
                                 size: 16,
-                                color: Color(0xFF006C48),
+                                color: Color(0xFF0E6C4A),
                               ),
                               label: const Text(
                                 'Add Custom Perk',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFF006C48),
+                                  color: Color(0xFF0E6C4A),
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
                                 side: const BorderSide(
-                                  color: Color(0xFF006C48),
+                                  color: Color(0xFF0E6C4A),
                                 ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(8),

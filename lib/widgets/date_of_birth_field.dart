@@ -65,20 +65,10 @@ class DateOfBirthField extends StatelessWidget {
             errorText: errorText,
             prefixIcon: const Icon(Icons.cake_outlined),
             suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
-            filled: true,
-            fillColor: const Color(0xFFF4FAFD),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE8EFF1)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFFE8EFF1)),
-            ),
           ),
           child: Text(
             value == null ? '' : formatDateOfBirth(value!),
-            style: const TextStyle(fontSize: 14, color: Color(0xFF161D1F)),
+            style: Theme.of(context).textTheme.bodyLarge,
           ),
         ),
       ),

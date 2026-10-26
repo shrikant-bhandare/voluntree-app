@@ -346,7 +346,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             const SizedBox(width: 64),
 
           if (first != null)
-            _buildPodiumItem(first, 1, const Color(0xFFFD8704), 84),
+            _buildPodiumItem(first, 1, const Color(0xFFC9A24A), 84),
 
           if (third != null)
             _buildPodiumItem(third, 3, const Color(0xFFB45309), 56)
@@ -381,7 +381,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 boxShadow: rank == 1
                     ? [
                         BoxShadow(
-                          color: const Color(0xFFFD8704).withOpacity(0.3),
+                          color: const Color(0xFFC9A24A).withOpacity(0.3),
                           blurRadius: 12,
                         ),
                       ]
@@ -406,7 +406,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 top: -12,
                 child: Icon(
                   Icons.workspace_premium,
-                  color: Color(0xFFFD8704),
+                  color: Color(0xFFC9A24A),
                   size: 24,
                 ),
               ),
@@ -452,7 +452,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         Text(
           '${user.reputationScore} pts',
           style: const TextStyle(
-            color: Color(0xFF006C48),
+            color: Color(0xFF0E6C4A),
             fontWeight: FontWeight.bold,
             fontSize: 11,
           ),
@@ -526,7 +526,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     if (user.reputationLevel == 'IMPACT_LEADER' ||
                         user.reputationLevel == 'PLATINUM') ...[
                       const SizedBox(width: 4),
-                      const Icon(Icons.eco, color: Color(0xFF006C48), size: 12),
+                      const Icon(Icons.eco, color: Color(0xFF0E6C4A), size: 12),
                     ],
                   ],
                 ),

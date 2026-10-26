@@ -123,10 +123,10 @@ class _InAppNotificationWidgetState extends State<_InAppNotificationWidget>
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B).withOpacity(0.9),
+                  color: const Color(0xFF1B4332).withOpacity(0.9),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFF334155),
+                    color: const Color(0xFF24543F),
                     width: 1.5,
                   ),
                   boxShadow: [
@@ -166,7 +166,7 @@ class _InAppNotificationWidgetState extends State<_InAppNotificationWidget>
                           Text(
                             widget.body,
                             style: const TextStyle(
-                              color: Color(0xFF94A3B8),
+                              color: Color(0xFF86AF99),
                               fontSize: 12,
                             ),
                             maxLines: 2,

@@ -5,6 +5,8 @@ import '../widgets/responsive.dart';
 import '../widgets/date_of_birth_field.dart';
 import '../utils/policy_links.dart';
 import 'otp_screen.dart';
+import '../theme/brand.dart';
+import '../widgets/voluntree_logo.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -114,6 +116,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const Center(child: VoluntreeBadge(size: 60)),
+                const SizedBox(height: 20),
                 Text(
                   'Join the Community',
                   style: theme.textTheme.headlineMedium?.copyWith(
@@ -138,23 +142,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Registration Card
                 Container(
                   padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(0xFFE8EFF1),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.primaryContainer.withOpacity(
-                          0.04,
-                        ),
-                        blurRadius: 24,
-                        offset: const Offset(0, 12),
-                      ),
-                    ],
-                  ),
+                  decoration: Brand.cardDecoration,
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -219,42 +207,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           style: TextStyle(color: theme.colorScheme.onSurface),
                           decoration: InputDecoration(
                             hintText: 'Full Name',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF717973),
-                            ),
+
                             prefixIcon: Icon(
                               Icons.badge_outlined,
                               color: theme.colorScheme.secondary,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF4FAFD),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFE8EFF1),
-                                width: 1,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 2,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 1.5,
-                              ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 2,
-                              ),
                             ),
                           ),
                           validator: (value) {
@@ -273,42 +229,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
                             hintText: 'Email Address',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF717973),
-                            ),
+
                             prefixIcon: Icon(
                               Icons.email_outlined,
                               color: theme.colorScheme.secondary,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF4FAFD),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFE8EFF1),
-                                width: 1,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 2,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 1.5,
-                              ),
-                            ),
-                            focusedErrorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.error,
-                                width: 2,
-                              ),
                             ),
                           ),
                           validator: (value) {
@@ -329,28 +253,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           keyboardType: TextInputType.phone,
                           decoration: InputDecoration(
                             hintText: 'Phone Number (Optional)',
-                            hintStyle: const TextStyle(
-                              color: Color(0xFF717973),
-                            ),
+
                             prefixIcon: Icon(
                               Icons.phone_outlined,
                               color: theme.colorScheme.secondary,
-                            ),
-                            filled: true,
-                            fillColor: const Color(0xFFF4FAFD),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFE8EFF1),
-                                width: 1,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 2,
-                              ),
                             ),
                           ),
                         ),
@@ -439,15 +345,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                         ElevatedButton(
                           onPressed: isLoading ? null : _register,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            elevation: 0,
-                          ),
                           child: isLoading
                               ? const SizedBox(
                                   height: 20,
