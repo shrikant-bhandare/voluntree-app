@@ -379,7 +379,9 @@ class EventService extends ChangeNotifier {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchEventApplications(
+  /// Every application for the drive, or `null` when any page fails, so the
+  /// caller can keep what it already has instead of showing a wrong headcount.
+  Future<List<Map<String, dynamic>>?> fetchEventApplications(
     String token,
     String eventId,
   ) async {
@@ -396,7 +398,7 @@ class EventService extends ChangeNotifier {
           Uri.parse('$baseUrl/applications/event/$eventId?$query'),
           headers: {'Authorization': 'Bearer $token'},
         );
-        if (response.statusCode != 200) return [];
+        if (response.statusCode != 200) return null;
         final decoded = jsonDecode(response.body);
         all.addAll(List<Map<String, dynamic>>.from(unwrapList(decoded)));
         cursor = nextCursorOf(decoded);
@@ -404,8 +406,8 @@ class EventService extends ChangeNotifier {
       return all;
     } catch (e) {
       debugPrint('fetchEventApplications error: $e');
+      return null;
     }
-    return [];
   }
 
   Future<Map<String, dynamic>> updateApplicationStatus(

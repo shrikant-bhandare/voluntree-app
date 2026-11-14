@@ -65,6 +65,19 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
     );
 
     if (!mounted) return;
+    if (apps == null) {
+      // Keep the previous list: an empty one would read as an empty drive.
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Brand.error,
+          content: Text('Could not load the volunteer list. Please try again.'),
+        ),
+      );
+      return;
+    }
     setState(() {
       _applications = apps;
       _isLoading = false;
