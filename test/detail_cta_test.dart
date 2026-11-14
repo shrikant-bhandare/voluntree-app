@@ -33,7 +33,6 @@ void main() {
     });
 
     for (final entry in const {
-      'FULL': 'Drive is full',
       'CANCELLED': 'Drive cancelled',
       'COMPLETED': 'Drive has ended',
       'SUSPENDED': 'Not accepting applications',
@@ -51,6 +50,60 @@ void main() {
       final result = cta(endTime: past);
       expect(result.kind, DetailCtaKind.none);
       expect(result.label, 'Drive has ended');
+    });
+  });
+
+  group('waitlist and re-applying', () {
+    test('a FULL drive offers to join the waitlist', () {
+      final result = cta(status: 'FULL');
+      expect(result.kind, DetailCtaKind.apply);
+      expect(result.label, 'Join the waitlist');
+    });
+
+    test('a FULL drive still checks the minimum age', () {
+      final result = cta(
+        status: 'FULL',
+        minAge: 18,
+        dateOfBirth: DateTime(2010, 1, 1),
+      );
+      expect(result.kind, DetailCtaKind.none);
+      expect(result.label, 'For volunteers aged 18+');
+    });
+
+    test('a volunteer who cancelled can apply again', () {
+      final result = cta(applicationStatus: 'CANCELLED');
+      expect(result.kind, DetailCtaKind.apply);
+      expect(result.label, 'Apply again');
+    });
+
+    test('a cancelled place on a cancelled drive offers nothing', () {
+      final result = cta(status: 'CANCELLED', applicationStatus: 'CANCELLED');
+      expect(result.kind, DetailCtaKind.none);
+      expect(result.label, 'Drive cancelled');
+    });
+  });
+
+  group('applyResultMessage', () {
+    test('tells a waitlisted volunteer what happens next', () {
+      expect(
+        applyResultMessage(driveTitle: 'Lake Cleanup', status: 'WAITLISTED'),
+        'You\'re on the waitlist for "Lake Cleanup". We\'ll move you in and tell you if a place opens.',
+      );
+    });
+
+    test('confirms a normal application, with the position when chosen', () {
+      expect(
+        applyResultMessage(driveTitle: 'Lake Cleanup', status: 'PENDING'),
+        'Applied to "Lake Cleanup". The organizer will review your application.',
+      );
+      expect(
+        applyResultMessage(
+          driveTitle: 'Lake Cleanup',
+          position: 'Registration desk',
+          status: 'PENDING',
+        ),
+        'Applied to "Lake Cleanup" as Registration desk. The organizer will review your application.',
+      );
     });
   });
 

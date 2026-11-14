@@ -6,6 +6,18 @@ import 'package:volunteer_mobile_app/utils/drive_cta.dart';
 /// pending state on the detail screen.
 void main() {
   group('driveCtaFor', () {
+    test('treats a cancelled place as not applied, so Join shows again', () {
+      final cta = driveCtaFor(
+        eventId: 'event-1',
+        userApplications: const [
+          {'eventId': 'event-1', 'status': 'CANCELLED'},
+        ],
+      );
+
+      expect(cta.label, 'Join');
+      expect(cta.isApplied, isFalse);
+    });
+
     test('offers Join when the volunteer has no application', () {
       final cta = driveCtaFor(eventId: 'event-1', userApplications: const []);
 
