@@ -9,6 +9,9 @@ import 'direct_chat_screen.dart';
 import 'create_event_screen.dart';
 import '../utils/text_utils.dart';
 import '../widgets/confirm_dialog.dart';
+import '../theme/brand.dart';
+import '../utils/place_status.dart';
+import '../widgets/roster_summary_bar.dart';
 
 class VolunteerManagementScreen extends StatefulWidget {
   final String eventId;
@@ -34,7 +37,7 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadApplications();
     });
@@ -254,9 +257,13 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
     final pending = _applications
         .where((app) => app['status'] == 'PENDING')
         .toList();
-    final confirmed = _applications
+    final approved = _applications
         .where((app) => app['status'] == 'APPROVED')
         .toList();
+    final waitlisted = _applications
+        .where((app) => app['status'] == 'WAITLISTED')
+        .toList();
+    final summary = rosterSummary(_applications);
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -378,7 +385,8 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
           ),
           tabs: [
             Tab(text: 'Pending (${pending.length})'),
-            Tab(text: 'Confirmed (${confirmed.length})'),
+            Tab(text: 'Approved (${approved.length})'),
+            Tab(text: 'Waitlist (${waitlisted.length})'),
           ],
         ),
       ),
@@ -390,7 +398,20 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                 controller: _tabController,
                 children: [
                   _buildApplicationsList(pending, true, theme),
-                  _buildApplicationsList(confirmed, false, theme),
+                  Column(
+                    children: [
+                      RosterSummaryBar(summary: summary),
+                      Expanded(
+                        child: _buildApplicationsList(approved, false, theme),
+                      ),
+                    ],
+                  ),
+                  _buildApplicationsList(
+                    waitlisted,
+                    true,
+                    theme,
+                    emptyText: 'Nobody is on the waitlist',
+                  ),
                 ],
               ),
       ),
@@ -400,8 +421,9 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
   Widget _buildApplicationsList(
     List<Map<String, dynamic>> items,
     bool isPending,
-    ThemeData theme,
-  ) {
+    ThemeData theme, {
+    String? emptyText,
+  }) {
     if (items.isEmpty) {
       return Center(
         child: Padding(
@@ -412,9 +434,10 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
               Icon(Icons.group_outlined, size: 64, color: Colors.grey[350]),
               const SizedBox(height: 16),
               Text(
-                isPending
-                    ? 'No pending applications'
-                    : 'No confirmed volunteers yet',
+                emptyText ??
+                    (isPending
+                        ? 'No pending applications'
+                        : 'No approved volunteers yet'),
                 style: const TextStyle(
                   color: Color(0xFF012D1D),
                   fontSize: 15,
@@ -510,6 +533,16 @@ class _VolunteerManagementScreenState extends State<VolunteerManagementScreen>
                                 Icons.check_circle,
                                 color: Color(0xFF0E6C4A),
                                 size: 14,
+                              ),
+                            ],
+                            if (!isPending && app['confirmedAt'] == null) ...[
+                              const SizedBox(width: 6),
+                              const Text(
+                                'Not replied',
+                                style: TextStyle(
+                                  color: Brand.sage,
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                             const SizedBox(width: 8),

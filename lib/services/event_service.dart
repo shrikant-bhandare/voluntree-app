@@ -383,15 +383,25 @@ class EventService extends ChangeNotifier {
     String token,
     String eventId,
   ) async {
+    // The server pages this list (100 is its maximum); follow the cursor so
+    // the tabs and the headcount cover the whole drive.
+    final all = <Map<String, dynamic>>[];
+    String? cursor;
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/applications/event/$eventId'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode == 200) {
-        final data = unwrapList(jsonDecode(response.body));
-        return List<Map<String, dynamic>>.from(data);
-      }
+      do {
+        final query = cursor == null
+            ? 'limit=100'
+            : 'limit=100&cursor=${Uri.encodeQueryComponent(cursor)}';
+        final response = await http.get(
+          Uri.parse('$baseUrl/applications/event/$eventId?$query'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        if (response.statusCode != 200) return [];
+        final decoded = jsonDecode(response.body);
+        all.addAll(List<Map<String, dynamic>>.from(unwrapList(decoded)));
+        cursor = nextCursorOf(decoded);
+      } while (cursor != null);
+      return all;
     } catch (e) {
       debugPrint('fetchEventApplications error: $e');
     }
