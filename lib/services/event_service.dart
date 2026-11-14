@@ -32,6 +32,12 @@ class EventModel {
   final List<String> openPositions;
   final List<String> perks;
 
+  /// Public link from the server; null when the drive is not publicly
+  /// visible. Only meaningful when [shareUrlProvided] (older servers
+  /// omit the field).
+  final String? shareUrl;
+  final bool shareUrlProvided;
+
   EventModel({
     required this.id,
     required this.title,
@@ -58,6 +64,8 @@ class EventModel {
     required this.isOrganizerVerified,
     this.openPositions = const [],
     this.perks = const [],
+    this.shareUrl,
+    this.shareUrlProvided = false,
   });
 
   factory EventModel.fromJson(Map<String, dynamic> json) {
@@ -102,6 +110,8 @@ class EventModel {
       perks: json['perks'] != null
           ? List<String>.from(json['perks'])
           : const [],
+      shareUrl: json['shareUrl'] as String?,
+      shareUrlProvided: json.containsKey('shareUrl'),
     );
   }
 }

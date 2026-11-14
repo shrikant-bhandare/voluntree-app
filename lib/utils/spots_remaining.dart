@@ -7,6 +7,8 @@
 /// the organizer view cannot disagree about how full a drive is.
 library;
 
+import 'drive_cta.dart' show liveDriveStatuses;
+
 /// Places still open. Never negative: an over-subscribed drive reads as full.
 int spotsRemaining({
   required int volunteersNeeded,
@@ -43,4 +45,23 @@ bool spotsAreScarce({
   if (left == 0) return false; // full is its own state, not urgency
   if (volunteersNeeded <= 0) return false;
   return left <= 3 || left / volunteersNeeded <= 0.2;
+}
+
+/// How many places a drive has, for guests and share previews.
+String placesLabel({
+  required String status,
+  required int needed,
+  required int approved,
+  required DateTime end,
+  DateTime? now,
+}) {
+  if (!end.isAfter(now ?? DateTime.now())) return 'This drive has ended';
+  if (!liveDriveStatuses.contains(status)) return 'This drive is not open';
+  if (status == 'FULL') return 'Full — you can join the waitlist';
+  final left = spotsRemaining(
+    volunteersNeeded: needed,
+    approvedCount: approved,
+  );
+  if (left == 0) return 'Full';
+  return '$left of $needed places left';
 }
