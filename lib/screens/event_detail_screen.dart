@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
@@ -13,6 +14,11 @@ import 'qr_pass_screen.dart';
 import 'edit_profile_screen.dart';
 import '../utils/drive_cta.dart';
 import '../utils/event_time.dart';
+import 'package:share_plus/share_plus.dart';
+import '../config.dart';
+import '../utils/share_links.dart';
+import '../widgets/add_to_calendar_sheet.dart';
+import '../widgets/app_bar_circle_button.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final EventModel? event;
@@ -51,6 +57,36 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           const SnackBar(content: Text('Could not open a maps app.')),
         );
       }
+    }
+  }
+
+  String? _shareUrlFor(EventModel e) => driveShareUrl(
+    eventId: e.id,
+    serverShareUrl: e.shareUrl,
+    serverSentShareUrl: e.shareUrlProvided,
+    apiBaseUrl: AppConfig.baseUrl,
+  );
+
+  Future<void> _shareDrive(EventModel e, String url) async {
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          text: driveShareText(
+            title: e.title,
+            organizer: e.organizerName,
+            start: e.startTime,
+            url: url,
+          ),
+          subject: e.title,
+        ),
+      );
+    } catch (_) {
+      // Browsers without the Web Share API throw: copy the link instead.
+      await Clipboard.setData(ClipboardData(text: url));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Link copied')));
     }
   }
 
@@ -404,6 +440,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       viewerIsVolunteer: authService.currentUser == null || isVolunteer,
     );
 
+    final shareUrl = _shareUrlFor(e);
+
     final dateStr = formatLocalDate(e.startTime);
     final timeStr = formatLocalTime(e.startTime);
     final endTimeStr = formatLocalTime(e.endTime);
@@ -422,16 +460,31 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   expandedHeight: 220,
                   pinned: true,
                   backgroundColor: theme.colorScheme.primary,
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.white.withOpacity(0.9),
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.arrow_back,
-                        color: theme.colorScheme.primary,
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
+                  leading: AppBarCircleButton(
+                    icon: Icons.arrow_back,
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
+                  actions: [
+                    if (shareUrl != null) ...[
+                      if (cta.kind == DetailCtaKind.viewPass)
+                        AppBarCircleButton(
+                          icon: Icons.event_available,
+                          tooltip: 'Add to calendar',
+                          onPressed: () => showAddToCalendarSheet(
+                            context,
+                            event: e,
+                            shareUrl: shareUrl,
+                          ),
+                        ),
+                      AppBarCircleButton(
+                        icon: Icons.share_outlined,
+                        tooltip: 'Share this drive',
+                        onPressed: () => _shareDrive(e, shareUrl),
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                  ],
                   flexibleSpace: FlexibleSpaceBar(
                     background: Stack(
                       fit: StackFit.expand,
