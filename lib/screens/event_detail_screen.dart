@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
@@ -14,9 +13,9 @@ import 'qr_pass_screen.dart';
 import 'edit_profile_screen.dart';
 import '../utils/drive_cta.dart';
 import '../utils/event_time.dart';
-import 'package:share_plus/share_plus.dart';
 import '../config.dart';
 import '../utils/share_links.dart';
+import '../utils/share_or_copy.dart';
 import '../widgets/add_to_calendar_sheet.dart';
 import '../widgets/app_bar_circle_button.dart';
 
@@ -67,28 +66,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     apiBaseUrl: AppConfig.baseUrl,
   );
 
-  Future<void> _shareDrive(EventModel e, String url) async {
-    try {
-      await SharePlus.instance.share(
-        ShareParams(
-          text: driveShareText(
-            title: e.title,
-            organizer: e.organizerName,
-            start: e.startTime,
-            url: url,
-          ),
-          subject: e.title,
-        ),
-      );
-    } catch (_) {
-      // Browsers without the Web Share API throw: copy the link instead.
-      await Clipboard.setData(ClipboardData(text: url));
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Link copied')));
-    }
-  }
+  Future<void> _shareDrive(EventModel e, String url) => shareOrCopyLink(
+    context,
+    text: driveShareText(
+      title: e.title,
+      organizer: e.organizerName,
+      start: e.startTime,
+      url: url,
+    ),
+    subject: e.title,
+    url: url,
+  );
 
   final _messageController = TextEditingController();
   EventModel? _event;
