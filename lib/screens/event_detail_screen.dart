@@ -180,9 +180,11 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            position == null
-                ? 'Applied to "${_event!.title}". The organizer will review your application.'
-                : 'Applied to "${_event!.title}" as $position. The organizer will review your application.',
+            applyResultMessage(
+              driveTitle: _event!.title,
+              position: position,
+              status: (result['application'] as Map?)?['status'] as String?,
+            ),
           ),
           backgroundColor: const Color(0xFF0E6C4A),
         ),
@@ -873,10 +875,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                                       onTap: cta.kind == DetailCtaKind.apply
                                           ? () => _showApplyBottomSheet(pos)
                                           : null,
-                                      buttonText:
-                                          cta.kind == DetailCtaKind.apply
-                                          ? 'Apply'
-                                          : cta.label,
+                                      buttonText: cta.label,
                                     ),
                                   ),
                                 )

@@ -4,6 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../services/attendance_service.dart';
+import '../services/api_helpers.dart';
+import '../theme/brand.dart';
+import '../utils/place_status.dart';
+import '../widgets/cancel_place_dialog.dart';
+import '../widgets/place_confirmation_banner.dart';
 import '../widgets/responsive.dart';
 import 'event_detail_screen.dart';
 import 'qr_pass_screen.dart';
@@ -18,6 +23,9 @@ class VolunteerEventsScreen extends StatefulWidget {
 class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  /// The application with a confirm/cancel request in flight.
+  String? _busyApplicationId;
 
   @override
   void initState() {
@@ -151,6 +159,7 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
                 event['startTime'],
               ).toLocal().toString().substring(0, 16)
             : 'Unknown';
+        final startTime = parseServerDateOrNull(event['startTime']);
 
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
@@ -274,6 +283,14 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
                         ),
                       ],
                     ),
+                    if (startTime != null)
+                      PlaceConfirmationBanner(
+                        prompt: placePromptFor(Map<String, dynamic>.from(app)),
+                        startsLabel: placeStartsLabel(startTime),
+                        busy: _busyApplicationId == app['id'],
+                        onConfirm: () => _confirmPlace(app),
+                        onCancel: () => _cancelPlace(app, title, startTime),
+                      ),
                     const Divider(height: 24),
                     Row(
                       children: [
@@ -363,14 +380,13 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
                   'Unknown')
             : 'Unknown';
 
-        Color statusColor = const Color(0xFF7A5A12); // Yellow
-        if (status == 'REJECTED') {
-          statusColor = const Color(0xFFBA1A1A); // Red
-        } else if (status == 'WAITLISTED') {
-          statusColor = const Color(0xFF1B4332); // Blue
-        } else if (status == 'UNDER_REVIEW') {
-          statusColor = const Color(0xFFC9A24A); // Orange
-        }
+        final statusColor = switch (status) {
+          'REJECTED' => Brand.error,
+          'WAITLISTED' => Brand.canopy,
+          'UNDER_REVIEW' => Brand.gold,
+          'CANCELLED' => Brand.sage,
+          _ => Brand.goldDeep,
+        };
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -452,7 +468,7 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          status,
+                          applicationStatusLabel(status),
                           style: TextStyle(
                             color: statusColor,
                             fontSize: 10,
@@ -462,17 +478,22 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
                       ),
                     ],
                   ),
-                  // Only while pending. Once an organizer has approved you the
-                  // roster is a plan other people are relying on, so leaving is
-                  // a conversation with them rather than a button.
-                  if (status == 'PENDING') ...[
+                  // Pending and waitlisted places can be withdrawn here. Once an
+                  // organizer has approved you the roster is a plan other people
+                  // are relying on, so you cancel it with "Can't make it" on the
+                  // Upcoming tab instead.
+                  if (status == 'PENDING' || status == 'WAITLISTED') ...[
                     const Divider(height: 20, color: Color(0xFFE8EFF1)),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
                         onPressed: () => _confirmWithdraw(app, title),
                         icon: const Icon(Icons.undo, size: 16),
-                        label: const Text('Withdraw'),
+                        label: Text(
+                          status == 'WAITLISTED'
+                              ? 'Leave waitlist'
+                              : 'Withdraw',
+                        ),
                         style: TextButton.styleFrom(
                           foregroundColor: const Color(0xFF717973),
                           minimumSize: const Size(0, 32),
@@ -487,6 +508,53 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
           ),
         );
       },
+    );
+  }
+
+  Future<void> _confirmPlace(dynamic app) async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final events = Provider.of<EventService>(context, listen: false);
+    setState(() => _busyApplicationId = app['id'] as String);
+    final error = await events.confirmPlace(auth.token!, app['id'] as String);
+    if (!mounted) return;
+    setState(() => _busyApplicationId = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error ?? "Thanks! The organizer knows you're coming."),
+        backgroundColor: error == null ? Brand.growth : Brand.error,
+      ),
+    );
+  }
+
+  Future<void> _cancelPlace(
+    dynamic app,
+    String title,
+    DateTime startTime,
+  ) async {
+    final reason = await showCancelPlaceDialog(
+      context,
+      driveTitle: title,
+      late: isLateCancellation(startTime),
+    );
+    if (reason == null || !mounted) return;
+
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final events = Provider.of<EventService>(context, listen: false);
+    setState(() => _busyApplicationId = app['id'] as String);
+    final error = await events.cancelPlace(
+      auth.token!,
+      app['id'] as String,
+      reason: reason,
+    );
+    if (!mounted) return;
+    setState(() => _busyApplicationId = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          error ?? 'Your place was cancelled and the organizer was told.',
+        ),
+        backgroundColor: error == null ? Brand.growth : Brand.error,
+      ),
     );
   }
 

@@ -4,6 +4,9 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../widgets/responsive.dart';
 import '../theme/brand.dart';
+import '../utils/notification_route.dart';
+import 'event_detail_screen.dart';
+import 'volunteer_events_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -192,6 +195,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       onTap: () {
                         if (!item.isRead && auth.token != null) {
                           notifService.markAsRead(auth.token!, item.id);
+                        }
+                        final destination = notificationDestination(item.data);
+                        switch (destination.target) {
+                          case NotificationTarget.myDrives:
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const VolunteerEventsScreen(),
+                              ),
+                            );
+                          case NotificationTarget.drive:
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => EventDetailScreen(
+                                  eventId: destination.eventId!,
+                                ),
+                              ),
+                            );
+                          case NotificationTarget.none:
+                            break;
                         }
                       },
                     ),
