@@ -105,6 +105,21 @@ void main() {
         'Applied to "Lake Cleanup" as Registration desk. The organizer will review your application.',
       );
     });
+
+    test('tells a volunteer approved at once that they have a place', () {
+      expect(
+        applyResultMessage(driveTitle: 'Lake Cleanup', status: 'APPROVED'),
+        "You're in! You have a place on Lake Cleanup.",
+      );
+      expect(
+        applyResultMessage(
+          driveTitle: 'Lake Cleanup',
+          position: 'Registration desk',
+          status: 'APPROVED',
+        ),
+        "You're in! You have a place on Lake Cleanup as Registration desk.",
+      );
+    });
   });
 
   group('by date of birth and minAge', () {

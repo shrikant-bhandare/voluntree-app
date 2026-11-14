@@ -171,7 +171,8 @@ DetailCta detailCtaFor({
 }
 
 /// What the volunteer is told after applying. The server decides between
-/// pending and waitlist (a FULL drive puts new sign-ups on its waitlist).
+/// pending and waitlist (a FULL drive puts new sign-ups on its waitlist), and
+/// a waitlist sign-up that finds a place already free is approved at once.
 String applyResultMessage({
   required String driveTitle,
   String? position,
@@ -182,6 +183,9 @@ String applyResultMessage({
         'We\'ll move you in and tell you if a place opens.';
   }
   final asPosition = position == null ? '' : ' as $position';
+  if (status == 'APPROVED') {
+    return "You're in! You have a place on $driveTitle$asPosition.";
+  }
   return 'Applied to "$driveTitle"$asPosition. '
       'The organizer will review your application.';
 }
