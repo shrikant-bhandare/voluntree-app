@@ -104,14 +104,22 @@ class DetailCta {
 /// file and meets [minAge]. A volunteer whose place was CANCELLED may apply
 /// again. The server enforces each rule too; this keeps the button from
 /// promising otherwise.
+///
+/// Only volunteers can apply: when [viewerIsVolunteer] is false (an organizer
+/// or admin viewing a drive) nothing is offered, whatever the drive's state.
 DetailCta detailCtaFor({
   required String status,
   required DateTime endTime,
   required int minAge,
   required DateTime? dateOfBirth,
   String? applicationStatus,
+  bool viewerIsVolunteer = true,
   DateTime? now,
 }) {
+  if (!viewerIsVolunteer) {
+    return const DetailCta(DetailCtaKind.none, 'Only volunteers can apply');
+  }
+
   final clock = now ?? DateTime.now();
   final ended = !endTime.isAfter(clock);
 

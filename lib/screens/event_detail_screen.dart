@@ -399,6 +399,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
       minAge: e.minAge,
       dateOfBirth: authService.currentUser?.dateOfBirth,
       applicationStatus: myApp?['status'] as String?,
+      // A signed-out guest keeps the default; signed-in organizers and admins
+      // cannot apply, so the server would answer with a role error.
+      viewerIsVolunteer: authService.currentUser == null || isVolunteer,
     );
 
     final dateStr = formatLocalDate(e.startTime);

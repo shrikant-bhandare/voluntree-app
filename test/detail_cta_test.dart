@@ -16,12 +16,14 @@ void main() {
     DateTime? dateOfBirth,
     bool noDob = false,
     String? applicationStatus,
+    bool viewerIsVolunteer = true,
   }) => detailCtaFor(
     status: status,
     endTime: endTime ?? future,
     minAge: minAge,
     dateOfBirth: noDob ? null : (dateOfBirth ?? adult),
     applicationStatus: applicationStatus,
+    viewerIsVolunteer: viewerIsVolunteer,
     now: now,
   );
 
@@ -177,6 +179,35 @@ void main() {
       expect(cta(applicationStatus: 'WAITLISTED').label, 'Waitlisted');
       expect(cta(applicationStatus: 'PENDING').enabled, isFalse);
     });
+  });
+
+  group('viewer is not a volunteer (QA-1)', () {
+    const label = 'Only volunteers can apply';
+
+    test('an organizer on a FULL drive is offered no waitlist', () {
+      final result = cta(status: 'FULL', viewerIsVolunteer: false);
+      expect(result.kind, DetailCtaKind.none);
+      expect(result.label, label);
+      expect(result.enabled, isFalse);
+    });
+
+    test('an organizer on an ACTIVE drive is offered no apply', () {
+      final result = cta(viewerIsVolunteer: false);
+      expect(result.kind, DetailCtaKind.none);
+      expect(result.label, label);
+    });
+
+    test(
+      'an organizer on a drive they cancelled is offered no apply again',
+      () {
+        final result = cta(
+          applicationStatus: 'CANCELLED',
+          viewerIsVolunteer: false,
+        );
+        expect(result.kind, DetailCtaKind.none);
+        expect(result.label, label);
+      },
+    );
   });
 
   test('driveStatusLabel reports an ended live drive as Ended', () {
