@@ -11,23 +11,39 @@ class NotificationItem {
   final bool isRead;
   final DateTime createdAt;
 
+  /// Routing payload from the API (`type`, `eventId`, `applicationId`, ...).
+  /// Empty for older notifications.
+  final Map<String, dynamic> data;
+
   NotificationItem({
     required this.id,
     required this.title,
     required this.body,
     required this.isRead,
     required this.createdAt,
+    this.data = const {},
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    final raw = json['data'];
     return NotificationItem(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
       body: json['body'] ?? '',
       isRead: json['isRead'] ?? false,
       createdAt: parseServerDate(json['createdAt']),
+      data: raw is Map ? Map<String, dynamic>.from(raw) : const {},
     );
   }
+
+  NotificationItem asRead() => NotificationItem(
+    id: id,
+    title: title,
+    body: body,
+    isRead: true,
+    createdAt: createdAt,
+    data: data,
+  );
 }
 
 /// Inbox state. Real-time delivery arrives on the chat socket
@@ -107,15 +123,7 @@ class NotificationService extends ChangeNotifier {
       if (response.statusCode == 200) {
         // Update local list
         _notifications = _notifications.map((n) {
-          if (n.id == notificationId) {
-            return NotificationItem(
-              id: n.id,
-              title: n.title,
-              body: n.body,
-              isRead: true,
-              createdAt: n.createdAt,
-            );
-          }
+          if (n.id == notificationId) return n.asRead();
           return n;
         }).toList();
         _hasUnread = _notifications.any((n) => !n.isRead);

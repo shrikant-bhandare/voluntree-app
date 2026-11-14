@@ -472,6 +472,75 @@ class EventService extends ChangeNotifier {
     }
   }
 
+  /// "Yes, I'll be there" for an approved place. Returns null on success,
+  /// otherwise the message to show.
+  Future<String?> confirmPlace(String token, String applicationId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/applications/$applicationId/confirm'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        _replaceApplication(applicationId, decoded);
+        return null;
+      }
+      return apiMessage(decoded, 'Could not confirm your place');
+    } catch (e) {
+      debugPrint('confirmPlace error: $e');
+      return friendlyNetworkError(e);
+    }
+  }
+
+  /// Gives up an approved place. Returns null on success, otherwise the
+  /// message to show.
+  Future<String?> cancelPlace(
+    String token,
+    String applicationId, {
+    String? reason,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/applications/$applicationId/cancel'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          if (reason != null && reason.trim().isNotEmpty)
+            'reason': reason.trim(),
+        }),
+      );
+      final decoded = response.body.isEmpty ? null : jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        _replaceApplication(applicationId, decoded);
+        return null;
+      }
+      return apiMessage(decoded, 'Could not cancel your place');
+    } catch (e) {
+      debugPrint('cancelPlace error: $e');
+      return friendlyNetworkError(e);
+    }
+  }
+
+  /// Swaps one application for the server's updated copy, keeping the event
+  /// details the list already holds (these endpoints return the application
+  /// without its event).
+  void _replaceApplication(String applicationId, dynamic updated) {
+    if (updated is! Map) return;
+    _userApplications = _userApplications.map((row) {
+      if (row is Map && row['id'] == applicationId) {
+        return {
+          ...Map<String, dynamic>.from(row),
+          ...Map<String, dynamic>.from(updated),
+          'event': row['event'],
+        };
+      }
+      return row;
+    }).toList();
+    notifyListeners();
+  }
+
   Future<void> fetchUserApplications(String token) async {
     try {
       final response = await http.get(
