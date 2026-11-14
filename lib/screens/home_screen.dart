@@ -30,6 +30,7 @@ import 'event_feed_screen.dart';
 import '../widgets/in_app_notification.dart';
 import '../widgets/responsive.dart';
 import '../utils/event_time.dart';
+import '../utils/open_notification.dart';
 import '../utils/session.dart';
 import '../utils/text_utils.dart';
 import '../widgets/confirm_dialog.dart';
@@ -71,7 +72,10 @@ class _HomeScreenState extends State<HomeScreen> {
             title: newNotif.title,
             body: newNotif.body,
             icon: Icons.notifications_active_outlined,
+            // Same destination as tapping it in the inbox; a notification
+            // that points nowhere opens the inbox.
             onTap: () {
+              if (openNotification(context, newNotif.data)) return;
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) => const NotificationsScreen(),
