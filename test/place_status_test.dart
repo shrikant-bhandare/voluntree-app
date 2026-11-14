@@ -27,14 +27,33 @@ void main() {
       expect(placePromptFor(app(), now: now), PlacePrompt.askToConfirm);
     });
 
-    test('does not ask more than 48 hours ahead', () {
+    test('only offers cancelling more than 48 hours ahead', () {
       final start = now.add(const Duration(hours: 60));
-      expect(placePromptFor(app(start: start), now: now), PlacePrompt.none);
+      expect(
+        placePromptFor(app(start: start), now: now),
+        PlacePrompt.cancelOnly,
+      );
+      final nextWeek = now.add(const Duration(days: 7));
+      expect(
+        placePromptFor(app(start: nextWeek), now: now),
+        PlacePrompt.cancelOnly,
+      );
     });
 
     test('shows the answer once confirmed', () {
       expect(
         placePromptFor(app(confirmedAt: '2026-11-13T04:00:00Z'), now: now),
+        PlacePrompt.confirmed,
+      );
+    });
+
+    test('keeps the answer more than 48 hours ahead', () {
+      final start = now.add(const Duration(hours: 60));
+      expect(
+        placePromptFor(
+          app(start: start, confirmedAt: '2026-11-13T04:00:00Z'),
+          now: now,
+        ),
         PlacePrompt.confirmed,
       );
     });
@@ -55,6 +74,14 @@ void main() {
     test('says nothing for a drive that is not running', () {
       expect(
         placePromptFor(app(eventStatus: 'CANCELLED'), now: now),
+        PlacePrompt.none,
+      );
+      final nextWeek = now.add(const Duration(days: 7));
+      expect(
+        placePromptFor(
+          app(start: nextWeek, eventStatus: 'SUSPENDED'),
+          now: now,
+        ),
         PlacePrompt.none,
       );
     });

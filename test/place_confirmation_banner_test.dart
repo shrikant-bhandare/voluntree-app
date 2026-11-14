@@ -9,9 +9,11 @@ void main() {
     PlacePrompt prompt, {
     VoidCallback? onConfirm,
     VoidCallback? onCancel,
+    ThemeData? theme,
   }) {
     return tester.pumpWidget(
       MaterialApp(
+        theme: theme,
         home: Scaffold(
           body: PlaceConfirmationBanner(
             prompt: prompt,
@@ -56,6 +58,46 @@ void main() {
     );
     expect(find.text("Yes, I'll be there"), findsNothing);
     expect(find.text("Can't make it"), findsOneWidget);
+  });
+
+  testWidgets(
+    'well before the drive, shows the start and only offers to cancel',
+    (tester) async {
+      var cancelled = 0;
+      await pump(tester, PlacePrompt.cancelOnly, onCancel: () => cancelled++);
+
+      expect(find.text('Starts tomorrow at 09:30'), findsOneWidget);
+      expect(find.textContaining('Still coming'), findsNothing);
+      expect(find.text("Yes, I'll be there"), findsNothing);
+      await tester.tap(find.text("Can't make it"));
+      expect(cancelled, 1);
+    },
+  );
+
+  testWidgets('buttons are 48 dp tall even without tap-target padding', (
+    tester,
+  ) async {
+    // Desktop and web browsers shrink-wrap tap targets, so the button's own
+    // minimum size is all there is.
+    await pump(
+      tester,
+      PlacePrompt.askToConfirm,
+      theme: ThemeData(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+      ),
+    );
+
+    expect(
+      tester
+          .getSize(find.widgetWithText(FilledButton, "Yes, I'll be there"))
+          .height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.widgetWithText(TextButton, "Can't make it")).height,
+      greaterThanOrEqualTo(48),
+    );
   });
 
   testWidgets('renders nothing when there is nothing to ask', (tester) async {

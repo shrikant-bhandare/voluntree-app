@@ -2,10 +2,14 @@ import '../services/api_helpers.dart';
 import 'drive_cta.dart';
 import 'event_time.dart';
 
-/// What the "My drives" card asks about an approved place.
+/// What the "My drives" card shows for an approved place.
 enum PlacePrompt {
-  /// Nothing to ask (not approved, too far ahead, or already started).
+  /// Nothing (not approved, the drive is not running, or it has started).
   none,
+
+  /// More than [placePromptWindow] ahead and not answered yet: show the
+  /// start and only offer "Can't make it".
+  cancelOnly,
 
   /// The drive starts within [placePromptWindow]: ask "still coming?".
   askToConfirm,
@@ -20,6 +24,19 @@ const Duration placePromptWindow = Duration(hours: 48);
 /// Cancelling inside this window is shown to the organizer as late.
 const Duration lateCancellationWindow = Duration(hours: 24);
 
+/// Decides what the "My drives" card shows for [application], a row from
+/// `GET /applications/my`:
+///
+/// * [PlacePrompt.none]: not an approved place, no readable drive or start
+///   time, a drive that is not running (the server refuses confirm and
+///   cancel then), or a drive that has already started.
+/// * [PlacePrompt.confirmed]: the volunteer already said yes, however far
+///   ahead the drive is. "Can't make it" stays available.
+/// * [PlacePrompt.cancelOnly]: more than [placePromptWindow] before the start
+///   and not answered. Too early to ask, but an approved volunteer can give
+///   up their place at any time before the start.
+/// * [PlacePrompt.askToConfirm]: within [placePromptWindow] of the start and
+///   not answered: "Still coming?" with Yes and "Can't make it".
 PlacePrompt placePromptFor(Map<String, dynamic> application, {DateTime? now}) {
   if (application['status'] != 'APPROVED') return PlacePrompt.none;
   final event = application['event'];
@@ -32,7 +49,9 @@ PlacePrompt placePromptFor(Map<String, dynamic> application, {DateTime? now}) {
   final clock = now ?? DateTime.now();
   if (!start.isAfter(clock)) return PlacePrompt.none;
   if (application['confirmedAt'] != null) return PlacePrompt.confirmed;
-  if (start.difference(clock) > placePromptWindow) return PlacePrompt.none;
+  if (start.difference(clock) > placePromptWindow) {
+    return PlacePrompt.cancelOnly;
+  }
   return PlacePrompt.askToConfirm;
 }
 
