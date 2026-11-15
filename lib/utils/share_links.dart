@@ -1,3 +1,4 @@
+import 'deep_link.dart' show publicDriveStatuses;
 import 'event_time.dart';
 
 /// Public link for a drive, or null when the server says it is not shareable.
@@ -17,6 +18,25 @@ String? driveShareUrl({
         : serverShareUrl;
   }
   return '$apiBaseUrl/p/e/$eventId';
+}
+
+/// [driveShareUrl], but null unless the drive's status is one the public page
+/// serves. The detail screen can be showing a cached list model (which has no
+/// `shareUrl`) of a draft or cancelled drive; those must not offer sharing.
+String? shareUrlForStatus({
+  required String status,
+  required String eventId,
+  String? serverShareUrl,
+  bool serverSentShareUrl = false,
+  required String apiBaseUrl,
+}) {
+  if (!publicDriveStatuses.contains(status)) return null;
+  return driveShareUrl(
+    eventId: eventId,
+    serverShareUrl: serverShareUrl,
+    serverSentShareUrl: serverSentShareUrl,
+    apiBaseUrl: apiBaseUrl,
+  );
 }
 
 String driveShareText({

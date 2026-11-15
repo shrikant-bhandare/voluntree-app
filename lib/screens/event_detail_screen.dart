@@ -59,7 +59,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
   }
 
-  String? _shareUrlFor(EventModel e) => driveShareUrl(
+  String? _shareUrlFor(EventModel e) => shareUrlForStatus(
+    status: e.status,
     eventId: e.id,
     serverShareUrl: e.shareUrl,
     serverSentShareUrl: e.shareUrlProvided,

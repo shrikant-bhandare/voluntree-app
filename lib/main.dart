@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'config.dart';
 import 'theme/app_theme.dart';
 import 'theme/brand.dart';
 import 'widgets/voluntree_logo.dart';
@@ -17,6 +21,7 @@ import 'services/posts_service.dart';
 import 'services/category_service.dart';
 import 'services/deep_link_service.dart';
 import 'services/push_tap_router.dart';
+import 'services/push_token_registrar.dart';
 import 'widgets/deep_link_host.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -37,6 +42,21 @@ const bool _forceSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
 /// Lets DeepLinkHost and PushTapRouter open screens from outside the widget
 /// tree's routes.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+/// `POST /auth/fcm-token`. Throws on a non-2xx answer so the registrar retries.
+Future<void> _sendFcmToken(String authToken, String deviceToken) async {
+  final response = await http.post(
+    Uri.parse('${AppConfig.baseUrl}/auth/fcm-token'),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $authToken',
+    },
+    body: jsonEncode({'fcmToken': deviceToken}),
+  );
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw Exception('fcm-token answered ${response.statusCode}');
+  }
+}
 
 void main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
@@ -70,11 +90,21 @@ void main() async {
           badge: true,
           sound: true,
         );
-        final fcmToken = await messaging.getToken();
-        debugPrint('[MAIN] Device FCM Token: $fcmToken');
       } catch (e) {
-        debugPrint('[MAIN] Push permission/token unavailable: $e');
+        debugPrint('[MAIN] Push permission unavailable: $e');
       }
+
+      // Registers the device token with the server for whoever is signed in
+      // (sign-in or restored session) and keeps it current on refresh. Lives
+      // for the whole app run. Failures are logged inside, never thrown.
+      PushTokenRegistrar(
+        session: auth,
+        isSignedIn: () => auth.isAuthenticated,
+        authToken: () => auth.token,
+        getDeviceToken: messaging.getToken,
+        onDeviceTokenRefresh: messaging.onTokenRefresh,
+        send: _sendFcmToken,
+      ).start();
     } catch (e) {
       debugPrint('[MAIN] Firebase initialization offline/skipped: $e');
     }
