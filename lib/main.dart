@@ -104,6 +104,7 @@ void main() async {
         getDeviceToken: messaging.getToken,
         onDeviceTokenRefresh: messaging.onTokenRefresh,
         send: _sendFcmToken,
+        deleteDeviceToken: messaging.deleteToken,
       ).start();
     } catch (e) {
       debugPrint('[MAIN] Firebase initialization offline/skipped: $e');

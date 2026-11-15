@@ -18,9 +18,14 @@ class PushTokenRegistrar {
   final Stream<String> onDeviceTokenRefresh;
   final Future<void> Function(String authToken, String deviceToken) send;
 
+  /// Invalidates the device token on logout so pushes meant for the person
+  /// who signed out stop arriving; the next sign-in fetches a fresh one.
+  final Future<void> Function()? deleteDeviceToken;
+
   /// The sign-in the device token was last registered for.
   String? _registeredFor;
   bool _inFlight = false;
+  bool _wasSignedIn = false;
   StreamSubscription<String>? _refreshSub;
 
   PushTokenRegistrar({
@@ -30,6 +35,7 @@ class PushTokenRegistrar {
     required this.getDeviceToken,
     required this.onDeviceTokenRefresh,
     required this.send,
+    this.deleteDeviceToken,
   });
 
   void start() {
@@ -50,10 +56,23 @@ class PushTokenRegistrar {
     final auth = isSignedIn() ? authToken() : null;
     if (auth == null) {
       _registeredFor = null;
+      if (_wasSignedIn) {
+        _wasSignedIn = false;
+        _deleteToken();
+      }
       return;
     }
+    _wasSignedIn = true;
     if (auth == _registeredFor || _inFlight) return;
     _register(null);
+  }
+
+  Future<void> _deleteToken() async {
+    try {
+      await deleteDeviceToken?.call();
+    } catch (e) {
+      debugPrint('[PUSH] Could not delete the device token: $e');
+    }
   }
 
   /// Registers [knownToken], or asks the device for its token when null.

@@ -28,6 +28,8 @@ void main() {
   late String? deviceToken;
   late bool senderFails;
   late bool getterFails;
+  late int deletes;
+  late bool deleteFails;
   late PushTokenRegistrar registrar;
 
   setUp(() {
@@ -37,6 +39,8 @@ void main() {
     deviceToken = 'device-token-1';
     senderFails = false;
     getterFails = false;
+    deletes = 0;
+    deleteFails = false;
     registrar = PushTokenRegistrar(
       session: session,
       isSignedIn: () => session.signedIn,
@@ -46,6 +50,10 @@ void main() {
         return deviceToken;
       },
       onDeviceTokenRefresh: refresh.stream,
+      deleteDeviceToken: () async {
+        deletes++;
+        if (deleteFails) throw StateError('delete failed');
+      },
       send: (authToken, deviceToken) async {
         if (senderFails) throw StateError('offline');
         sent.add((authToken, deviceToken));
@@ -130,6 +138,32 @@ void main() {
     session.signIn('jwt-b');
     await settle();
     expect(sent, isEmpty);
+  });
+
+  test('logout deletes the device token; signed-out start does not', () async {
+    session.notifyListeners();
+    await settle();
+    expect(deletes, 0);
+    session.signIn('jwt-a');
+    await settle();
+    session.signOut();
+    await settle();
+    expect(deletes, 1);
+    session.notifyListeners();
+    await settle();
+    expect(deletes, 1);
+  });
+
+  test('a failing delete is swallowed and the next sign-in sends', () async {
+    deleteFails = true;
+    session.signIn('jwt-a');
+    await settle();
+    session.signOut();
+    await settle();
+    deviceToken = 'device-token-fresh';
+    session.signIn('jwt-b');
+    await settle();
+    expect(sent.last, ('jwt-b', 'device-token-fresh'));
   });
 
   test('a failed send is retried on the next session change', () async {
