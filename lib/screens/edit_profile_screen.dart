@@ -6,6 +6,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import '../config.dart';
+import '../utils/share_or_copy.dart';
+import '../utils/student_proof.dart';
 import '../services/auth_service.dart';
 import '../widgets/responsive.dart';
 import '../widgets/date_of_birth_field.dart';
@@ -23,6 +25,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _bioController = TextEditingController();
   final _locationController = TextEditingController();
   final _educationOrJobController = TextEditingController();
+  final _institutionController = TextEditingController();
+  final _studentIdController = TextEditingController();
+  bool _publicProfile = false;
   final _emergencyNameController = TextEditingController();
   final _emergencyContactController = TextEditingController();
   final _socialGithubController = TextEditingController();
@@ -54,6 +59,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _bioController.text = profile.bio ?? '';
       _locationController.text = profile.location ?? '';
       _educationOrJobController.text = profile.educationOrJob ?? '';
+      _institutionController.text = profile.institution ?? '';
+      _studentIdController.text = profile.studentId ?? '';
+      _publicProfile = profile.publicProfile;
       _emergencyNameController.text = profile.emergencyName ?? '';
       _emergencyContactController.text = profile.emergencyContact ?? '';
       _socialGithubController.text = profile.socialGithub ?? '';
@@ -71,6 +79,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _bioController.dispose();
     _locationController.dispose();
     _educationOrJobController.dispose();
+    _institutionController.dispose();
+    _studentIdController.dispose();
     _emergencyNameController.dispose();
     _emergencyContactController.dispose();
     _socialGithubController.dispose();
@@ -125,6 +135,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       experienceLevel: _experienceLevel,
       availability: availabilityList,
       dateOfBirth: _dateOfBirth,
+      institution: _institutionController.text.trim(),
+      studentId: _studentIdController.text.trim(),
+      publicProfile: canHavePublicProfile(_dateOfBirth)
+          ? _publicProfile
+          : false,
     );
 
     if (mounted) {
@@ -455,6 +470,73 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         theme,
                       ),
                       style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _institutionController,
+                      decoration: _buildInputDecoration(
+                        'College or school (for your hours report)',
+                        Icons.school_outlined,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _studentIdController,
+                      decoration: _buildInputDecoration(
+                        'Student ID / roll number (optional)',
+                        Icons.badge_outlined,
+                        theme,
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    Builder(
+                      builder: (context) {
+                        final auth = Provider.of<AuthService>(context);
+                        final adult = canHavePublicProfile(_dateOfBirth);
+                        final url = auth.currentUser?.publicProfileUrl;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: _publicProfile && adult,
+                              onChanged: adult
+                                  ? (v) => setState(() => _publicProfile = v)
+                                  : null,
+                              title: const Text('Public Impact profile'),
+                              subtitle: Text(
+                                adult
+                                    ? 'A web page with your name, photo, bio, skills, college, the date you joined, and your verified hours and drives. No email, phone or date of birth.'
+                                    : 'Available from age 18.',
+                              ),
+                            ),
+                            if (_publicProfile && adult && url != null)
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SelectableText(
+                                      url,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.share_outlined),
+                                    tooltip: 'Share my Impact profile',
+                                    onPressed: () => shareOrCopyLink(
+                                      context,
+                                      text: 'My Voluntree Impact profile: $url',
+                                      subject: 'My Voluntree Impact profile',
+                                      url: url,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
 

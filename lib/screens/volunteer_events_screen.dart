@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../utils/file_save.dart';
+import '../utils/student_proof.dart';
+import '../widgets/hours_report_card.dart';
 import '../services/auth_service.dart';
 import '../services/event_service.dart';
 import '../services/attendance_service.dart';
@@ -26,6 +30,8 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
 
   /// The application with a confirm/cancel request in flight.
   String? _busyApplicationId;
+
+  bool _reportBusy = false;
 
   @override
   void initState() {
@@ -602,6 +608,58 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
     );
   }
 
+  Future<void> _downloadHoursReport() async {
+    // The server's "today" is India time; a device in another zone must not
+    // be able to pick a date the server calls the future.
+    final today = indiaToday(DateTime.now());
+    final (defaultFrom, defaultTo) = defaultReportRange(today);
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: today,
+      initialDateRange: DateTimeRange(start: defaultFrom, end: defaultTo),
+      helpText: 'Hours report period',
+    );
+    if (range == null || !mounted) return;
+
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final attendance = Provider.of<AttendanceService>(context, listen: false);
+    setState(() => _reportBusy = true);
+    final result = await attendance.downloadHoursReport(
+      auth.token!,
+      range.start,
+      range.end,
+    );
+    if (!mounted) return;
+    setState(() => _reportBusy = false);
+
+    if (result.bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.error!), backgroundColor: Brand.error),
+      );
+      return;
+    }
+    final outcome = await saveBytesForUser(
+      bytes: result.bytes!,
+      fileName: hoursReportFileName(range.start, range.end),
+      mimeType: 'application/pdf',
+      dialogTitle: 'Save hours report',
+    );
+    if (!mounted || outcome == SaveOutcome.cancelled) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          outcome == SaveOutcome.saved
+              ? 'Report saved. Share the PDF with your college.'
+              : 'Could not save the report.',
+        ),
+        backgroundColor: outcome == SaveOutcome.saved
+            ? Brand.growth
+            : Brand.error,
+      ),
+    );
+  }
+
   Widget _buildCompletedTab(List<dynamic> history, ThemeData theme) {
     if (history.isEmpty) {
       return _buildEmptyState(
@@ -614,9 +672,16 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      itemCount: history.length,
+      itemCount: history.length + 1,
       itemBuilder: (context, index) {
-        final item = history[index];
+        if (index == 0) {
+          return HoursReportCard(
+            onDownload: _downloadHoursReport,
+            busy: _reportBusy,
+          );
+        }
+        final item = history[index - 1];
+        final certPageUrl = certificatePageUrl(serverUrl: item.certificateUrl);
         final eventTitle = item.eventTitle;
         final checkIn = item.checkIn.toLocal().toString().substring(0, 16);
         final checkOut = item.checkOut != null
@@ -683,6 +748,30 @@ class _VolunteerEventsScreenState extends State<VolunteerEventsScreen>
                           ],
                         ),
                       ),
+                      if (certPageUrl != null &&
+                          item.certificateCode != null) ...[
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          onPressed: () => launchUrl(
+                            Uri.parse(
+                              linkedInCertificationUrl(
+                                driveTitle: eventTitle,
+                                issuedOn: item.checkIn.toLocal(),
+                                certUrl: certPageUrl,
+                                certId: item.certificateCode!,
+                              ),
+                            ),
+                            mode: LaunchMode.externalApplication,
+                          ),
+                          icon: const Icon(Icons.add_link, size: 16),
+                          label: const Text('Add to LinkedIn'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Brand.forest,
+                            minimumSize: const Size(0, 36),
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

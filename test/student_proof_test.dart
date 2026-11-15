@@ -53,4 +53,11 @@ void main() {
       DateTime(2027, 3, 2),
     ));
   });
+
+  test('indiaToday is the India calendar date whatever the device zone', () {
+    // 20:00 UTC on 14 Nov is already 15 Nov in India.
+    expect(indiaToday(DateTime.utc(2026, 11, 14, 20)), DateTime(2026, 11, 15));
+    // 17:00 UTC on 14 Nov is 22:30 on the 14th in India.
+    expect(indiaToday(DateTime.utc(2026, 11, 14, 17)), DateTime(2026, 11, 14));
+  });
 }

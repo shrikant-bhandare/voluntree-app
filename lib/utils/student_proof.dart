@@ -34,3 +34,10 @@ String hoursReportFileName(DateTime from, DateTime to) =>
   final startYear = now.month >= 6 ? now.year : now.year - 1;
   return (DateTime(startYear, 6, 1), DateTime(now.year, now.month, now.day));
 }
+
+/// Today's calendar date in India (UTC+5:30), the day the server uses for
+/// "today", whatever time zone the device is in.
+DateTime indiaToday(DateTime now) {
+  final ist = now.toUtc().add(const Duration(hours: 5, minutes: 30));
+  return DateTime(ist.year, ist.month, ist.day);
+}
