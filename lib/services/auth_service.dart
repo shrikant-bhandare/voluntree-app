@@ -108,37 +108,48 @@ class AuthService extends ChangeNotifier {
   String? _token;
   UserInfo? _currentUser;
   bool _isLoading = false;
+  bool _sessionRestored = false;
 
   String? get token => _token;
   UserInfo? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _token != null && _currentUser != null;
 
+  /// Whether start-up has finished reading the saved session, found or not.
+  /// Until then [isAuthenticated] is false even for someone signed in, so a
+  /// shared link opened the guest view over a session still being read.
+  bool get sessionRestored => _sessionRestored;
+
   AuthService() {
     _loadSession();
   }
 
   Future<void> _loadSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedToken = prefs.getString('access_token');
-    if (savedToken == null) return;
-
-    // Surface the restore as a loading state so AuthGate shows its splash
-    // instead of flashing LoginScreen and then swapping to HomeScreen.
-    _isLoading = true;
-    _token = savedToken;
-    notifyListeners();
     try {
-      // Validate token and fetch current profile details. One transient
-      // network error must not strand a valid 7-day session on the login
-      // screen, so retry once before giving up.
-      await fetchMe();
-      if (_currentUser == null && _token != null) {
-        await Future.delayed(const Duration(seconds: 2));
+      final prefs = await SharedPreferences.getInstance();
+      final savedToken = prefs.getString('access_token');
+      if (savedToken == null) return;
+
+      // Surface the restore as a loading state so AuthGate shows its splash
+      // instead of flashing LoginScreen and then swapping to HomeScreen.
+      _isLoading = true;
+      _token = savedToken;
+      notifyListeners();
+      try {
+        // Validate token and fetch current profile details. One transient
+        // network error must not strand a valid 7-day session on the login
+        // screen, so retry once before giving up.
         await fetchMe();
+        if (_currentUser == null && _token != null) {
+          await Future.delayed(const Duration(seconds: 2));
+          await fetchMe();
+        }
+      } finally {
+        _isLoading = false;
       }
     } finally {
-      _isLoading = false;
+      // Every exit counts — a saved session, none, or an error reading it.
+      _sessionRestored = true;
       notifyListeners();
     }
   }

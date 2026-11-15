@@ -36,6 +36,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Host of the public share pages (plan 02). Override per build with
+        // -PappLinkHost=... when the share domain changes.
+        manifestPlaceholders["appLinkHost"] =
+            (project.findProperty("appLinkHost") as String?) ?: "apivoluntree.neureonix.com"
     }
 
     signingConfigs {

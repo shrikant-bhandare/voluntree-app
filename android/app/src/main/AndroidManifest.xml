@@ -32,6 +32,25 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Shared drive links open the app (plan 02). The host serves
+                 /.well-known/assetlinks.json with this app's signing keys.
+                 The pattern is /p/e/ plus exactly 36 characters (a UUID), so
+                 /p/e/<id>/calendar.ics still opens in the browser or a
+                 calendar app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="${appLinkHost}"
+                    android:pathPattern="/p/e/...................................." />
+            </intent-filter>
+            <!-- app_links handles incoming links; Flutter's own deep-link
+                 routing would try to push "/p/e/<id>" as a named route. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

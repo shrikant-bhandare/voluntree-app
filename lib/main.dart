@@ -15,6 +15,8 @@ import 'services/report_service.dart';
 import 'services/payments_service.dart';
 import 'services/posts_service.dart';
 import 'services/category_service.dart';
+import 'services/deep_link_service.dart';
+import 'widgets/deep_link_host.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -65,11 +67,15 @@ void main() async {
         ChangeNotifierProvider(create: (_) => PaymentsService()),
         ChangeNotifierProvider(create: (_) => PostsService()),
         ChangeNotifierProvider(create: (_) => CategoryService()),
+        ChangeNotifierProvider(create: (_) => DeepLinkService()..start()),
       ],
       child: const MyApp(),
     ),
   );
 }
+
+/// Lets DeepLinkHost open screens from outside the widget tree's routes.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -81,6 +87,11 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.light(),
+      navigatorKey: appNavigatorKey,
+      builder: (context, child) => DeepLinkHost(
+        navigatorKey: appNavigatorKey,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: const AuthGate(),
     );
   }

@@ -10,6 +10,7 @@ import 'package:volunteer_mobile_app/services/leaderboard_service.dart';
 import 'package:volunteer_mobile_app/services/notification_service.dart';
 import 'package:volunteer_mobile_app/services/report_service.dart';
 import 'package:volunteer_mobile_app/services/payments_service.dart';
+import 'package:volunteer_mobile_app/services/deep_link_service.dart';
 
 void main() {
   testWidgets('App starts and displays Login screen', (
@@ -27,6 +28,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => NotificationService()),
           ChangeNotifierProvider(create: (_) => ReportService()),
           ChangeNotifierProvider(create: (_) => PaymentsService()),
+          ChangeNotifierProvider(create: (_) => DeepLinkService()),
         ],
         child: const MyApp(),
       ),
