@@ -52,18 +52,29 @@ void main() async {
     try {
       await Firebase.initializeApp();
       final messaging = FirebaseMessaging.instance;
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
-      final fcmToken = await messaging.getToken();
-      debugPrint('[MAIN] Device FCM Token: $fcmToken');
 
       // Taps on a push: a cold start (getInitialMessage) or the app in the
       // background (onMessageOpenedApp) open the screen the push points to.
+      // Routing needs neither the permission nor the token, so it is wired
+      // first and a failure below cannot stop it.
       final pushTaps = PushTapRouter(navigatorKey: appNavigatorKey, auth: auth);
       FirebaseMessaging.onMessageOpenedApp.listen(
         (message) => pushTaps.handleTap(message.data),
       );
       final initial = await messaging.getInitialMessage();
       if (initial != null) pushTaps.handleTap(initial.data);
+
+      try {
+        await messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        final fcmToken = await messaging.getToken();
+        debugPrint('[MAIN] Device FCM Token: $fcmToken');
+      } catch (e) {
+        debugPrint('[MAIN] Push permission/token unavailable: $e');
+      }
     } catch (e) {
       debugPrint('[MAIN] Firebase initialization offline/skipped: $e');
     }
