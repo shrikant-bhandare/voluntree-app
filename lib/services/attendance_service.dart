@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
+import '../utils/event_time.dart';
 import 'api_helpers.dart';
 
 class PassDetails {
@@ -62,6 +63,10 @@ class CompletedDrive {
   final String eventTitle;
   final String eventCategory;
 
+  /// Certificate code and download path, present once a drive is verified.
+  final String? certificateCode;
+  final String? certificateUrl;
+
   CompletedDrive({
     required this.id,
     required this.eventId,
@@ -70,6 +75,8 @@ class CompletedDrive {
     required this.hoursLogged,
     required this.eventTitle,
     required this.eventCategory,
+    this.certificateCode,
+    this.certificateUrl,
   });
 
   factory CompletedDrive.fromJson(Map<String, dynamic> json) {
@@ -81,6 +88,8 @@ class CompletedDrive {
       hoursLogged: (json['hoursLogged'] ?? 0.0).toDouble(),
       eventTitle: json['event']?['title'] ?? '',
       eventCategory: json['event']?['category'] ?? '',
+      certificateCode: json['certificateCode'] as String?,
+      certificateUrl: json['certificateUrl'] as String?,
     );
   }
 }
@@ -274,6 +283,39 @@ class AttendanceService extends ChangeNotifier {
     } catch (e) {
       debugPrint('DownloadCertificate Error: $e');
       return null;
+    }
+  }
+
+  /// The hours report PDF for a college. Returns the bytes, or the message to
+  /// show (for example "There are no QR-verified hours in this period.").
+  Future<({Uint8List? bytes, String? error})> downloadHoursReport(
+    String token,
+    DateTime from,
+    DateTime to,
+  ) async {
+    try {
+      final uri = Uri.parse('$baseUrl/attendance/report').replace(
+        queryParameters: {
+          'from': formatCalendarDate(from),
+          'to': formatCalendarDate(to),
+        },
+      );
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return (bytes: response.bodyBytes, error: null);
+      }
+      return (
+        bytes: null,
+        error: apiMessage(
+          tryDecodeJson(response.body),
+          'Could not create the report',
+        ),
+      );
+    } catch (e) {
+      return (bytes: null, error: friendlyNetworkError(e));
     }
   }
 }

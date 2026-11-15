@@ -22,6 +22,10 @@ class UserProfile {
   final String? educationOrJob;
   final String? socialGithub;
   final String? socialLinkedin;
+  final String? institution;
+  final String? studentId;
+  final bool publicProfile;
+  final String? publicSlug;
 
   UserProfile({
     required this.id,
@@ -39,6 +43,10 @@ class UserProfile {
     this.educationOrJob,
     this.socialGithub,
     this.socialLinkedin,
+    this.institution,
+    this.studentId,
+    this.publicProfile = false,
+    this.publicSlug,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -58,6 +66,10 @@ class UserProfile {
       educationOrJob: json['educationOrJob'],
       socialGithub: json['socialGithub'],
       socialLinkedin: json['socialLinkedin'],
+      institution: json['institution'],
+      studentId: json['studentId'],
+      publicProfile: json['publicProfile'] == true,
+      publicSlug: json['publicSlug'],
     );
   }
 }
@@ -75,6 +87,9 @@ class UserInfo {
   /// Required by the API before a volunteer can apply to a drive.
   final DateTime? dateOfBirth;
 
+  /// Public Impact profile link, or null when the profile is not public.
+  final String? publicProfileUrl;
+
   UserInfo({
     required this.id,
     required this.email,
@@ -84,6 +99,7 @@ class UserInfo {
     required this.isVerified,
     this.profile,
     this.dateOfBirth,
+    this.publicProfileUrl,
   });
 
   factory UserInfo.fromJson(Map<String, dynamic> json) {
@@ -95,6 +111,7 @@ class UserInfo {
       userType: json['userType'] ?? 'VOLUNTEER',
       isVerified: json['isVerified'] ?? false,
       dateOfBirth: parseCalendarDate(json['dateOfBirth']),
+      publicProfileUrl: json['publicProfileUrl'] as String?,
       profile: json['profile'] != null
           ? UserProfile.fromJson(json['profile'])
           : null,
@@ -380,6 +397,9 @@ class AuthService extends ChangeNotifier {
     String? experienceLevel,
     List<String>? availability,
     DateTime? dateOfBirth,
+    String? institution,
+    String? studentId,
+    bool? publicProfile,
   }) async {
     if (_token == null) {
       return {'success': false, 'message': 'User is not authenticated.'};
@@ -410,6 +430,9 @@ class AuthService extends ChangeNotifier {
       if (dateOfBirth != null) {
         bodyData['dateOfBirth'] = formatCalendarDate(dateOfBirth);
       }
+      if (institution != null) bodyData['institution'] = institution;
+      if (studentId != null) bodyData['studentId'] = studentId;
+      if (publicProfile != null) bodyData['publicProfile'] = publicProfile;
 
       final response = await http.put(
         Uri.parse('$baseUrl/auth/profile'),
