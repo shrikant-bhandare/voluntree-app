@@ -21,8 +21,9 @@ void main() {
 
   Future<void> run(
     WidgetTester tester,
-    Future<ShareResult> Function(ShareParams) share,
-  ) async {
+    Future<ShareResult> Function(ShareParams) share, {
+    Future<void> Function(ClipboardData)? copy,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -34,6 +35,7 @@ void main() {
                 subject: 'Drive',
                 url: url,
                 share: share,
+                copy: copy ?? Clipboard.setData,
               ),
               child: const Text('go'),
             ),
@@ -56,6 +58,24 @@ void main() {
     await run(tester, (_) async => ShareResult.unavailable);
     expect(clipboard, url);
     expect(find.text('Link copied'), findsOneWidget);
+  });
+
+  testWidgets('refused clipboard write shows the link in a dialog', (
+    tester,
+  ) async {
+    await run(
+      tester,
+      (_) async => ShareResult.unavailable,
+      copy: (_) async => throw Exception('clipboard denied'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Share this drive'), findsOneWidget);
+    expect(find.widgetWithText(SelectableText, url), findsOneWidget);
+    expect(find.text('Link copied'), findsNothing);
+
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Share this drive'), findsNothing);
   });
 
   testWidgets('successful share leaves clipboard and snackbar alone', (
