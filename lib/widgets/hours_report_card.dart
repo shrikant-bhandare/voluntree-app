@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/brand.dart';
 
-/// Top of the Completed tab: a PDF of QR-verified hours that colleges accept
+/// Top of the Completed tab: a PDF of hours recorded with a QR check-in that colleges accept
 /// for community-engagement credits, with a link anyone can verify.
 class HoursReportCard extends StatelessWidget {
   final Future<void> Function() onDownload;
@@ -36,7 +36,7 @@ class HoursReportCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             const Text(
-              'A PDF of your QR-verified hours with a link your college can '
+              'A PDF of your hours recorded with a QR check-in, with a link your college can '
               'open to check it.',
               style: TextStyle(color: Brand.inkMuted),
             ),

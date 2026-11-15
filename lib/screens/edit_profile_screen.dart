@@ -510,7 +510,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               subtitle: Text(
                                 adult
                                     ? 'A web page with your name, photo, bio, skills, college, the date you joined, and your verified hours and drives. No email, phone or date of birth.'
-                                    : 'Available from age 18.',
+                                    : publicProfileUnavailableReason(
+                                            _dateOfBirth,
+                                          ) ??
+                                          '',
                               ),
                             ),
                             if (_publicProfile && adult && url != null)
@@ -530,6 +533,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       text: 'My Voluntree Impact profile: $url',
                                       subject: 'My Voluntree Impact profile',
                                       url: url,
+                                      fallbackTitle:
+                                          'Share your Impact profile',
                                     ),
                                   ),
                                 ],

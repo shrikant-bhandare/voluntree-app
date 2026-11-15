@@ -63,7 +63,8 @@ class CompletedDrive {
   final String eventTitle;
   final String eventCategory;
 
-  /// Certificate code and download path, present once a drive is verified.
+  /// Certificate code and public certificate page URL, present once a drive is
+  /// verified.
   final String? certificateCode;
   final String? certificateUrl;
 
@@ -287,7 +288,7 @@ class AttendanceService extends ChangeNotifier {
   }
 
   /// The hours report PDF for a college. Returns the bytes, or the message to
-  /// show (for example "There are no QR-verified hours in this period.").
+  /// show (for example "There are no completed volunteering sessions in this period.").
   Future<({Uint8List? bytes, String? error})> downloadHoursReport(
     String token,
     DateTime from,

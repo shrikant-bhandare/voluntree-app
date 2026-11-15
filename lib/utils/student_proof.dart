@@ -4,6 +4,14 @@ import 'event_time.dart';
 bool canHavePublicProfile(DateTime? dateOfBirth, {DateTime? now}) =>
     dateOfBirth != null && ageOn(dateOfBirth, now ?? DateTime.now()) >= 18;
 
+/// Why the public-profile switch is disabled, or null when it can be turned on.
+String? publicProfileUnavailableReason(DateTime? dateOfBirth, {DateTime? now}) {
+  if (canHavePublicProfile(dateOfBirth, now: now)) return null;
+  return dateOfBirth == null
+      ? 'Add your date of birth above to turn this on.'
+      : 'Available from age 18.';
+}
+
 /// LinkedIn's "Add to profile" form for one certificate.
 String linkedInCertificationUrl({
   required String driveTitle,

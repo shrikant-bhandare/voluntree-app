@@ -4,6 +4,21 @@ import 'package:volunteer_mobile_app/utils/student_proof.dart';
 void main() {
   final now = DateTime(2026, 11, 14);
 
+  test('explains why the public profile switch is off', () {
+    expect(
+      publicProfileUnavailableReason(null, now: now),
+      'Add your date of birth above to turn this on.',
+    );
+    expect(
+      publicProfileUnavailableReason(DateTime(2008, 11, 15), now: now),
+      'Available from age 18.',
+    );
+    expect(
+      publicProfileUnavailableReason(DateTime(2008, 11, 14), now: now),
+      isNull,
+    );
+  });
+
   test('public profiles are for adults with a date of birth', () {
     expect(canHavePublicProfile(DateTime(2008, 11, 14), now: now), isTrue);
     expect(canHavePublicProfile(DateTime(2008, 11, 15), now: now), isFalse);

@@ -69,11 +69,11 @@ void main() {
       'checkIn': '2026-10-04T09:00:00.000Z',
       'hoursLogged': 3.5,
       'certificateCode': 'CERT-7H2K',
-      'certificateUrl': '/attendance/certificate/a1',
+      'certificateUrl': 'https://api.example.org/p/c/CERT-7H2K',
     });
 
     expect(drive.certificateCode, 'CERT-7H2K');
-    expect(drive.certificateUrl, '/attendance/certificate/a1');
+    expect(drive.certificateUrl, 'https://api.example.org/p/c/CERT-7H2K');
   });
 
   test('CompletedDrive has no certificate when the fields are absent', () {

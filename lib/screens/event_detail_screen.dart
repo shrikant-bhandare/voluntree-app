@@ -77,6 +77,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     ),
     subject: e.title,
     url: url,
+    fallbackTitle: 'Share this drive',
   );
 
   final _messageController = TextEditingController();

@@ -23,6 +23,7 @@ void main() {
     WidgetTester tester,
     Future<ShareResult> Function(ShareParams) share, {
     Future<void> Function(ClipboardData)? copy,
+    String? fallbackTitle,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -34,6 +35,7 @@ void main() {
                 text: 'hi $url',
                 subject: 'Drive',
                 url: url,
+                fallbackTitle: fallbackTitle ?? 'Share this drive',
                 share: share,
                 copy: copy ?? Clipboard.setData,
               ),
@@ -75,6 +77,18 @@ void main() {
 
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
+    expect(find.text('Share this drive'), findsNothing);
+  });
+
+  testWidgets('the dialog title is the one the caller passes', (tester) async {
+    await run(
+      tester,
+      (_) async => ShareResult.unavailable,
+      copy: (_) async => throw Exception('clipboard denied'),
+      fallbackTitle: 'Share your Impact profile',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Share your Impact profile'), findsOneWidget);
     expect(find.text('Share this drive'), findsNothing);
   });
 

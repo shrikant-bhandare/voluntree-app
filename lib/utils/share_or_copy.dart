@@ -17,6 +17,7 @@ Future<void> shareOrCopyLink(
   required String text,
   required String subject,
   required String url,
+  String fallbackTitle = 'Share this drive',
   Future<ShareResult> Function(ShareParams params) share = _systemShare,
   Future<void> Function(ClipboardData data) copy = _systemCopy,
 }) async {
@@ -37,7 +38,7 @@ Future<void> shareOrCopyLink(
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Share this drive'),
+        title: Text(fallbackTitle),
         content: SelectableText(url),
         actions: [
           TextButton(
