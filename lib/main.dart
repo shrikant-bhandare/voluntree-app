@@ -16,6 +16,7 @@ import 'services/payments_service.dart';
 import 'services/posts_service.dart';
 import 'services/category_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/push_tap_router.dart';
 import 'widgets/deep_link_host.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -33,6 +34,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 /// ordinary accessibility tooling.
 const bool _forceSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
 
+/// Lets DeepLinkHost and PushTapRouter open screens from outside the widget
+/// tree's routes.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   if (_forceSemantics) {
@@ -42,6 +47,7 @@ void main() async {
   // Firebase web needs its own generated options + a messaging service
   // worker; neither is configured, so the web build relies on the in-app
   // socket notifications instead of FCM push.
+  final auth = AuthService();
   if (!kIsWeb) {
     try {
       await Firebase.initializeApp();
@@ -49,6 +55,15 @@ void main() async {
       await messaging.requestPermission(alert: true, badge: true, sound: true);
       final fcmToken = await messaging.getToken();
       debugPrint('[MAIN] Device FCM Token: $fcmToken');
+
+      // Taps on a push: a cold start (getInitialMessage) or the app in the
+      // background (onMessageOpenedApp) open the screen the push points to.
+      final pushTaps = PushTapRouter(navigatorKey: appNavigatorKey, auth: auth);
+      FirebaseMessaging.onMessageOpenedApp.listen(
+        (message) => pushTaps.handleTap(message.data),
+      );
+      final initial = await messaging.getInitialMessage();
+      if (initial != null) pushTaps.handleTap(initial.data);
     } catch (e) {
       debugPrint('[MAIN] Firebase initialization offline/skipped: $e');
     }
@@ -57,7 +72,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider(create: (_) => EventService()),
         ChangeNotifierProvider(create: (_) => ChatService()),
         ChangeNotifierProvider(create: (_) => AttendanceService()),
@@ -73,9 +88,6 @@ void main() async {
     ),
   );
 }
-
-/// Lets DeepLinkHost open screens from outside the widget tree's routes.
-final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
